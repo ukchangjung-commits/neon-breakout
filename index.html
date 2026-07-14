@@ -372,16 +372,42 @@
   }
 
   // ---- 난이도 스케일링 — 12지신 색동 단계(보스 48마리 = 1단계)에 비례 ----
-  function diffStage() { return Math.min(9, Math.floor(bossKills / 48)); }
-  // 폭탄 비율: 첫 보스 전 40%, 이후 60% + 단계당 2%p (최대 78%)
+  // 시작 화면에서 1~10단계 수동 선택 가능 (null = 자동: 이니셜 진행 기반)
+  let manualStage = null;
+  {
+    const savedStage = localStorage.getItem('neon-breakout-stage');
+    if (savedStage !== null && savedStage !== 'auto') {
+      manualStage = Math.max(0, Math.min(9, Number(savedStage) || 0));
+    }
+  }
+  const STAGE_BOX = { w: 44, h: 44, gap: 10 };
+  function stageBoxRect(i) {
+    const total = 10 * STAGE_BOX.w + 9 * STAGE_BOX.gap;
+    return {
+      x: W / 2 - total / 2 + i * (STAGE_BOX.w + STAGE_BOX.gap),
+      y: H / 2 + 104, w: STAGE_BOX.w, h: STAGE_BOX.h,
+    };
+  }
+  function stageAtPoint(x, y) {
+    for (let i = 0; i < 10; i++) {
+      const r = stageBoxRect(i);
+      if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return i;
+    }
+    return -1;
+  }
+  function diffStage() {
+    if (manualStage !== null) return manualStage;
+    return Math.min(9, Math.floor(bossKills / 48));
+  }
+  // 폭탄 비율: (자동) 첫 보스 전 40%, 이후 60% + 단계당 2%p (최대 78%)
   function hazardRatio() {
-    if (bossKills === 0) return 0.40;
+    if (manualStage === null && bossKills === 0) return 0.40;
     return Math.min(0.78, 0.60 + 0.02 * diffStage());
   }
-  // 전체 드롭률: 첫 보스 전 25%(폭탄 수 1/3 수준), 이후 45% + 단계당 2%p
+  // 전체 드롭률: (자동) 첫 보스 전 25%(폭탄 수 1/3 수준), 이후 45% + 단계당 2%p
   // → 아이템 등장률은 14~18%로 거의 일정, 폭탄만 단계적으로 증가
   function dropRate() {
-    if (bossKills === 0) return 0.25;
+    if (manualStage === null && bossKills === 0) return 0.25;
     return Math.min(0.65, 0.45 + 0.02 * diffStage());
   }
   // 이니셜 입력 시 — 이번 판 킬을 그 이니셜에게 귀속하고 진행 상태 이어받기
@@ -2088,6 +2114,33 @@
         ctx.fillText('클릭 또는 SPACE를 누르세요', W / 2, H / 2 + 52);
       }
 
+      // 난이도 단계 선택 (1~10 라운드 사각형)
+      ctx.fillStyle = '#5f7396';
+      ctx.font = '13px Consolas, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(
+        manualStage === null
+          ? '난이도 — 클릭으로 선택 (현재: 자동 ' + (diffStage() + 1) + '단계)'
+          : '난이도 — ' + (manualStage + 1) + '단계 선택됨 (다시 누르면 자동)',
+        W / 2, H / 2 + 90);
+      for (let i = 0; i < 10; i++) {
+        const r = stageBoxRect(i);
+        const sel = manualStage === i;
+        const auto = manualStage === null && diffStage() === i;
+        ctx.fillStyle = sel ? 'rgba(255, 194, 51, 0.18)' : '#0d1426';
+        ctx.strokeStyle = sel ? '#ffc233' : auto ? '#22e6ff' : '#1d2b4d';
+        ctx.lineWidth = 2;
+        if (sel) { ctx.shadowColor = '#ffc233'; ctx.shadowBlur = 12; }
+        ctx.beginPath();
+        ctx.roundRect(r.x, r.y, r.w, r.h, 8);
+        ctx.fill();
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = sel ? '#ffc233' : auto ? '#22e6ff' : '#5f7396';
+        ctx.font = 'bold 18px Consolas, monospace';
+        ctx.fillText(String(i + 1), r.x + r.w / 2, r.y + 29);
+      }
+
       // 시뮬레이션 완급 캡션
       const ph = getAttractPhase();
       ctx.textAlign = 'center';
@@ -2120,7 +2173,7 @@
         ['S  패들 축소 — 함정!', '#ff9a3d'],
         ['💣 폭탄 — 피하거나 격추(+15점)', '#ff5555'],
       ];
-      const legendY = H / 2 + 110;
+      const legendY = H / 2 + 205;
       ctx.fillStyle = '#5f7396';
       ctx.font = '13px Consolas, monospace';
       ctx.fillText('— 아이템 안내 —', W / 2, legendY - 28);
@@ -2133,21 +2186,21 @@
       }
       ctx.textAlign = 'center';
 
-      // 랭킹 TOP 3 (하단) — 글로벌 우선, 없으면 로컬
+      // 랭킹 TOP 3 (하단 한 줄) — 글로벌 우선, 없으면 로컬
       const ranks = (cloudTop && cloudTop.length ? cloudTop : localTopCache).slice(0, 3);
       if (ranks.length) {
-        const ry = H - 165;
         ctx.fillStyle = '#5f7396';
         ctx.font = '13px Consolas, monospace';
-        ctx.fillText(fdb ? '— 🏆 글로벌 랭킹 TOP 3 —' : '— 🏆 랭킹 TOP 3 —', W / 2, ry - 28);
+        ctx.fillText(fdb ? '— 🏆 글로벌 랭킹 TOP 3 —' : '— 🏆 랭킹 TOP 3 —', W / 2, H - 102);
         const medals = ['🥇', '🥈', '🥉'];
         const rankColors = ['#ffd700', '#c0c0c0', '#cd7f32'];
+        const spread = Math.min(240, (W - 160) / 3); // 화면 폭에 맞춰 간격
         for (let i = 0; i < ranks.length; i++) {
           ctx.fillStyle = rankColors[i];
-          ctx.font = (i === 0 ? 'bold 21px' : 'bold 17px') + ' Consolas, monospace';
+          ctx.font = (i === 0 ? 'bold 20px' : 'bold 17px') + ' Consolas, monospace';
           ctx.fillText(
-            medals[i] + ' ' + (ranks[i].name || '---') + '  ' + ranks[i].score + '점',
-            W / 2, ry + i * 30);
+            medals[i] + ' ' + (ranks[i].name || '---') + ' ' + ranks[i].score + '점',
+            W / 2 + (i - 1) * spread, H - 72);
         }
       }
     }
@@ -2353,6 +2406,12 @@
       canvas.style.cursor = inNewGameBtn(pt.x, pt.y) ? 'pointer' : '';
       return; // 입력 화면에선 패들 안 움직임
     }
+    // 데모 화면 — 난이도 박스 위에서 손가락 커서
+    if (state.attract && !pointerLocked) {
+      const apt = canvasPoint(e);
+      canvas.style.cursor = stageAtPoint(apt.x, apt.y) >= 0 ? 'pointer' : '';
+      return; // 데모 중 패들은 AI가 조종
+    }
     if (canvas.style.cursor) canvas.style.cursor = ''; // 입력 화면을 벗어나면 커서 복원
     if (pointerLocked) {
       const rect = canvas.getBoundingClientRect();
@@ -2371,7 +2430,16 @@
   canvas.addEventListener('mousedown', (e) => {
     lastInputTick = state.tick;
     ensureAudio();
-    if (state.attract) { requestLock(); startRealGame(); return; } // 데모 중 클릭 = 게임 시작
+    if (state.attract) { // 데모 중 — 단계 박스 클릭 = 난이도 선택, 그 외 = 게임 시작
+      const apt = canvasPoint(e);
+      const si = stageAtPoint(apt.x, apt.y);
+      if (si >= 0) {
+        manualStage = (manualStage === si) ? null : si; // 같은 칸 재클릭 = 자동 복귀
+        localStorage.setItem('neon-breakout-stage', manualStage === null ? 'auto' : manualStage);
+        return;
+      }
+      requestLock(); startRealGame(); return;
+    }
     if (state.mode === 'entry') { // 이니셜 화면 — '새 게임' 버튼만 클릭 반응
       const pt = canvasPoint(e);
       if (inNewGameBtn(pt.x, pt.y)) { canvas.style.cursor = ''; startRealGame(); }
@@ -2396,7 +2464,16 @@
     lastInputTick = state.tick;
     e.preventDefault();
     ensureAudio();
-    if (state.attract) { startRealGame(); return; }
+    if (state.attract) {
+      const apt = canvasPoint(e);
+      const si = stageAtPoint(apt.x, apt.y);
+      if (si >= 0) {
+        manualStage = (manualStage === si) ? null : si;
+        localStorage.setItem('neon-breakout-stage', manualStage === null ? 'auto' : manualStage);
+        return;
+      }
+      startRealGame(); return;
+    }
     if (state.mode === 'entry') { // 터치 — 버튼 탭 = 새 게임, 그 외 탭 = 저장 (키보드 없는 기기용)
       const pt = canvasPoint(e);
       if (inNewGameBtn(pt.x, pt.y)) startRealGame();
