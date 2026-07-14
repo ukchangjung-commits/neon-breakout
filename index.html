@@ -541,6 +541,12 @@
   const PADDLE_NARROW = Math.round(PADDLE_W * 0.6);
   const MAX_BALLS = 9;
   const BALL_R = 7;
+  // 이니셜 화면의 '새 게임' 버튼 영역 (캔버스 좌표)
+  const NEWGAME_BTN = { x: W / 2 - 115, y: 612, w: 230, h: 46 };
+  function inNewGameBtn(x, y) {
+    return x >= NEWGAME_BTN.x && x <= NEWGAME_BTN.x + NEWGAME_BTN.w &&
+           y >= NEWGAME_BTN.y && y <= NEWGAME_BTN.y + NEWGAME_BTN.h;
+  }
 
   // ---- 스테이지 벽돌 패턴 ----
   // include(r, c, rows, cols) → 해당 칸에 벽돌을 놓을지
@@ -1865,6 +1871,25 @@
       ctx.fillStyle = '#5f7396';
       ctx.font = '13px Consolas, monospace';
       ctx.fillText('ESC — 저장하지 않고 닫기', W / 2, 574);
+
+      // 새 게임 버튼 (마우스 클릭 가능)
+      const nb = NEWGAME_BTN;
+      ctx.fillStyle = '#0d1426';
+      ctx.strokeStyle = '#2effc8';
+      ctx.lineWidth = 2;
+      ctx.shadowColor = '#2effc8';
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.roundRect(nb.x, nb.y, nb.w, nb.h, 10);
+      ctx.fill();
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#2effc8';
+      ctx.font = 'bold 18px Consolas, monospace';
+      ctx.fillText('▶ 새 게임 시작', W / 2, nb.y + 30);
+      ctx.fillStyle = '#5f7396';
+      ctx.font = '12px Consolas, monospace';
+      ctx.fillText('(기록 저장 없이 바로 시작)', W / 2, nb.y + 66);
       ctx.restore();
       return;
     }
@@ -2192,6 +2217,15 @@
     const cx = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
     return cx * (W / rect.width);
   }
+  // 캔버스 내부 좌표 (x, y)
+  function canvasPoint(e) {
+    const rect = canvas.getBoundingClientRect();
+    const src = e.touches ? e.touches[0] : e;
+    return {
+      x: (src.clientX - rect.left) * (W / rect.width),
+      y: (src.clientY - rect.top) * (H / rect.height),
+    };
+  }
   // 포인터 잠금 — 클릭하면 커서가 게임에 고정되어 화면 밖으로 못 나감 (ESC로 해제)
   let pointerLocked = false;
   document.addEventListener('pointerlockchange', () => {
@@ -2208,6 +2242,13 @@
   // 잠금 중엔 이동량(movementX)으로, 아니면 창 전체 좌표로 패들 추적
   window.addEventListener('mousemove', (e) => {
     lastInputTick = state.tick;
+    // 이니셜 화면 — '새 게임' 버튼 위에서 손가락 커서
+    if (state.mode === 'entry' && !pointerLocked) {
+      const pt = canvasPoint(e);
+      canvas.style.cursor = inNewGameBtn(pt.x, pt.y) ? 'pointer' : '';
+      return; // 입력 화면에선 패들 안 움직임
+    }
+    if (canvas.style.cursor) canvas.style.cursor = ''; // 입력 화면을 벗어나면 커서 복원
     if (pointerLocked) {
       const rect = canvas.getBoundingClientRect();
       state.paddle.x += e.movementX * (W / rect.width);
@@ -2226,6 +2267,11 @@
     lastInputTick = state.tick;
     ensureAudio();
     if (state.attract) { requestLock(); startRealGame(); return; } // 데모 중 클릭 = 게임 시작
+    if (state.mode === 'entry') { // 이니셜 화면 — '새 게임' 버튼만 클릭 반응
+      const pt = canvasPoint(e);
+      if (inNewGameBtn(pt.x, pt.y)) { canvas.style.cursor = ''; startRealGame(); }
+      return;
+    }
     if (e.button === 1) { e.preventDefault(); useAmmoSet('rapid'); return; } // 휠클릭 — 탄창
     if (e.button === 2) { useAmmoSet('bomb'); return; }                      // 우클릭 — 폭탄
     requestLock();
@@ -2239,7 +2285,12 @@
     e.preventDefault();
     ensureAudio();
     if (state.attract) { startRealGame(); return; }
-    if (state.mode === 'entry') { confirmEntry(); return; } // 터치 기기는 키보드가 없어 탭 = 저장
+    if (state.mode === 'entry') { // 터치 — 버튼 탭 = 새 게임, 그 외 탭 = 저장 (키보드 없는 기기용)
+      const pt = canvasPoint(e);
+      if (inNewGameBtn(pt.x, pt.y)) startRealGame();
+      else confirmEntry();
+      return;
+    }
     if (state.mode === 'play') { state.firing = true; tryShoot(); }
     else onAction();
   }, { passive: false });
