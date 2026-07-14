@@ -971,23 +971,29 @@
     // 200점 단위 돌파 → 축포!
     const crossed = Math.floor(state.score / 200) - Math.floor(before / 200);
     if (crossed > 0) celebrate(Math.floor(state.score / 200) * 200);
-    // 30000점 단위 돌파 → 하트 +1 + 팡파레! (개수 제한 없음)
+    // 30000점 단위 돌파 → CI가 번쩍이며 하트를 떨어뜨림 (받아야 +1)
     const k1000 = Math.floor(state.score / 30000) - Math.floor(before / 30000);
     if (k1000 > 0) {
-      state.lives += k1000;
+      triggerCiHeartDrop(Math.min(2, 1 + Math.floor(Math.random() * 2))); // 1~2개
       sfx.fanfare();
       confettiBlast();
-      for (let i = 0; i < 10; i++) {
-        state.fireworks.push({
-          delay: 20 + i * 9,
-          x: 60 + Math.random() * (W - 120),
-          y: 80 + Math.random() * 320,
-          color: ROW_COLORS[Math.floor(Math.random() * ROW_COLORS.length)],
-        });
-      }
-      showToast('💖 ' + Math.floor(state.score / 30000) * 30000 + '점 돌파! 하트 +1!', '#ff5577');
+      showToast('💖 ' + Math.floor(state.score / 30000) * 30000 + '점 돌파! CI가 하트를 떨어뜨린다!', '#ff5577');
     }
     updateHud();
+  }
+
+  // ---- 30000점 보너스 — CI 후광 번쩍 + 하트 낙하 ----
+  let ciFlash = null; // { s: 대상 별, t: 남은 프레임, hearts, spawned }
+  function triggerCiHeartDrop(n) {
+    const bigs = ciStars.filter(st => st.w >= 150); // 상단 대형 로고 우선
+    const pool = bigs.length ? bigs : ciStars;
+    ciFlash = { s: pool[Math.floor(Math.random() * pool.length)], t: 110, hearts: n, spawned: false };
+  }
+  function spawnHeartDrop(x, y) {
+    state.drops.push({
+      x: Math.max(20, Math.min(W - 20, x)),
+      y, vy: 1.6, heart: true, hazard: false, type: null,
+    });
   }
 
   function celebrate(milestone) {
@@ -1571,7 +1577,14 @@
       if (d.y > H + 12) { state.drops.splice(i, 1); continue; }
       if (d.y + 9 >= H - 34 && d.y - 9 <= H - 34 + p.h + 6 &&
           d.x >= p.x - 10 && d.x <= p.x + p.w + 10) {
-        if (d.hazard) {
+        if (d.heart) { // 하트 캡슐 — 받으면 목숨 +1
+          state.drops.splice(i, 1);
+          state.lives++;
+          updateHud();
+          sfx.fanfare();
+          spawnParticles(d.x, H - 40, '#ff5577', 22, 1.6);
+          showToast('💖 하트 획득! +1 ♥', '#ff5577');
+        } else if (d.hazard) {
           state.drops.splice(i, 1);
           bombHitPaddle(d.x);
         } else {
@@ -1834,10 +1847,42 @@
         let a = 0.055 * grad;                          // 평소 — 은은한 고정 밝기
         const fl = (state.tick + s.seed) % s.per;      // 별마다 다른 주기·타이밍
         if (fl < 50) a += 0.24 * grad * Math.sin((fl / 50) * Math.PI); // 반짝! — 또렷하게 밝아졌다 원상태로
-        ctx.globalAlpha = Math.min(0.32, a);
+
+        // 30000점 보너스 — 선택된 CI에 흰 후광 + 번쩍
+        if (ciFlash && ciFlash.s === s) {
+          const env = Math.sin((1 - ciFlash.t / 110) * Math.PI); // 0→1→0 봉우리
+          const lh2 = s.w * (20 / 109);
+          const cx2 = s.x, cy2 = s.y + lh2 / 2;
+          const R = s.w * (0.7 + 0.3 * env);
+          const halo = ctx.createRadialGradient(cx2, cy2, 4, cx2, cy2, R);
+          halo.addColorStop(0, 'rgba(255,255,255,' + (0.75 * env).toFixed(3) + ')');
+          halo.addColorStop(0.5, 'rgba(255,255,255,' + (0.28 * env).toFixed(3) + ')');
+          halo.addColorStop(1, 'rgba(255,255,255,0)');
+          ctx.fillStyle = halo;
+          ctx.beginPath();
+          ctx.arc(cx2, cy2, R, 0, Math.PI * 2);
+          ctx.fill();
+          a = Math.max(a, 0.95 * env); // 로고 자체도 하얗게 떠오름
+          ctx.shadowColor = '#ffffff';
+          ctx.shadowBlur = 46 * env;
+        }
+        ctx.globalAlpha = Math.min(ciFlash && ciFlash.s === s ? 0.95 : 0.32, a);
         ctx.drawImage(CI_IMG, s.x - s.w / 2, s.y, s.w, s.w * (20 / 109));
+        ctx.shadowBlur = 0;
       }
       ctx.globalAlpha = 1;
+      // 번쩍 정점에서 하트 낙하 → 연출 종료
+      if (ciFlash) {
+        ciFlash.t--;
+        if (!ciFlash.spawned && ciFlash.t <= 55) {
+          ciFlash.spawned = true;
+          const s = ciFlash.s;
+          for (let i = 0; i < ciFlash.hearts; i++) {
+            spawnHeartDrop(s.x + (i - (ciFlash.hearts - 1) / 2) * 70, s.y + 30);
+          }
+        }
+        if (ciFlash.t <= 0) ciFlash = null;
+      }
     }
 
     // 벽돌
@@ -1871,8 +1916,22 @@
     }
     ctx.shadowBlur = 0;
 
-    // 낙하물 (아이템 캡슐 / 위험 폭탄)
+    // 낙하물 (아이템 캡슐 / 위험 폭탄 / 하트)
     for (const d of state.drops) {
+      if (d.heart) {
+        // 하트 캡슐 — 분홍빛으로 두근두근
+        const hp2 = 1 + 0.18 * Math.sin(d.y * 0.15);
+        ctx.fillStyle = '#ff5577';
+        ctx.shadowColor = '#ff5577';
+        ctx.shadowBlur = 16;
+        ctx.font = 'bold ' + Math.round(24 * hp2) + 'px Consolas, monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('♥', d.x, d.y);
+        ctx.textBaseline = 'alphabetic';
+        ctx.shadowBlur = 0;
+        continue;
+      }
       if (d.hazard) {
         const pulse = 0.6 + 0.4 * Math.abs(Math.sin(d.y * 0.12));
         const wob = Math.sin(d.y * 0.08) * 0.25;
