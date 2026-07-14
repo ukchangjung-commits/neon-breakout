@@ -370,6 +370,20 @@
     bossMap[currentPlayer] = bossKills;
     localStorage.setItem(BOSSMAP_KEY, JSON.stringify(bossMap));
   }
+
+  // ---- 난이도 스케일링 — 12지신 색동 단계(보스 48마리 = 1단계)에 비례 ----
+  function diffStage() { return Math.min(9, Math.floor(bossKills / 48)); }
+  // 폭탄 비율: 첫 보스 전 40%, 이후 60% + 단계당 2%p (최대 78%)
+  function hazardRatio() {
+    if (bossKills === 0) return 0.40;
+    return Math.min(0.78, 0.60 + 0.02 * diffStage());
+  }
+  // 전체 드롭률: 첫 보스 전 25%(폭탄 수 1/3 수준), 이후 45% + 단계당 2%p
+  // → 아이템 등장률은 14~18%로 거의 일정, 폭탄만 단계적으로 증가
+  function dropRate() {
+    if (bossKills === 0) return 0.25;
+    return Math.min(0.65, 0.45 + 0.02 * diffStage());
+  }
   // 이니셜 입력 시 — 이번 판 킬을 그 이니셜에게 귀속하고 진행 상태 이어받기
   function assignPlayerKills(name) {
     if (name !== currentPlayer) {
@@ -562,7 +576,7 @@
     { key: 'narrow',letter: 'S', color: '#ff9a3d', name: '패들 축소…', weight: 14, timed: true },
   ];
   const BUFF_DURATION = 600;   // 프레임 (~10초)
-  const DROP_CHANCE = 0.45;    // 콤보 2+ 파괴 시 드롭 확률
+  // 드롭 확률·폭탄 비율은 난이도 단계 함수(dropRate/hazardRatio)로 계산
   // 화면 폭에 비례한 크기 (720px 기준 50 / 확장 80 / 축소 30)
   const PADDLE_W = Math.round(W * 0.07);
   const PADDLE_WIDE = Math.round(PADDLE_W * 1.6);
@@ -633,7 +647,7 @@
 
   function shotCost()     { return state.buffs.rapid > 0 ? 7 : 14; }
   function fireInterval() { return state.buffs.rapid > 0 ? 5 : 11; }
-  function ballSpeed()    { return 6.2 + (state.level - 1) * 0.35; }
+  function ballSpeed()    { return (6.2 + (state.level - 1) * 0.35) * (1 + 0.025 * diffStage()); }
 
   function buildLevel() {
     state.bricks = [];
@@ -959,7 +973,7 @@
   }
 
   function spawnDrop(x, y, forceHazard) {
-    const hazard = forceHazard || Math.random() < 2 / 3;
+    const hazard = forceHazard || Math.random() < hazardRatio();
     state.drops.push({
       x, y, vy: 2.0,
       hazard,
@@ -969,7 +983,7 @@
 
   function maybeDrop(brick) {
     if (state.combo < 2) return;
-    if (Math.random() > DROP_CHANCE) return;
+    if (Math.random() > dropRate()) return;
     spawnDrop(brick.x + brick.w / 2, brick.y + brick.h / 2, false);
   }
 
@@ -1399,7 +1413,7 @@
     for (let i = state.drops.length - 1; i >= 0; i--) {
       const d = state.drops[i];
       d.y += d.vy;
-      d.vy = Math.min(d.vy + 0.03, 3.6);
+      d.vy = Math.min(d.vy + 0.03, 3.6 + 0.2 * diffStage()); // 단계마다 낙하 최고속도 증가
       if (d.y > H + 12) { state.drops.splice(i, 1); continue; }
       if (d.y + 9 >= H - 34 && d.y - 9 <= H - 34 + p.h + 6 &&
           d.x >= p.x - 10 && d.x <= p.x + p.w + 10) {
