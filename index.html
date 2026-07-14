@@ -231,9 +231,14 @@
     text-shadow: 0 0 12px rgba(255, 85, 119, 0.65), 0 0 28px rgba(255, 85, 119, 0.3);
     letter-spacing: 4px;
     font-size: 30px;
-    line-height: 1;
+    line-height: 1.08;
     display: inline-block;
     transform-origin: right center;
+    /* 하트가 많아지면 두 줄로 감쌈 (한 줄 약 8개) */
+    max-width: 285px;
+    white-space: normal;
+    word-break: break-all;
+    text-align: left;
   }
   @keyframes lifeLost {
     0%   { transform: scale(1); }
@@ -922,10 +927,11 @@
     state.paddle.h = Math.min(16, 4 + state.lives * 2);
     bestEl.textContent = best;
     levelEl.textContent = isBossLevel(state.level) ? state.level + ' BOSS' : state.level;
-    // 빈 하트(죽은 횟수)는 왼쪽부터, 채워진 하트(남은 목숨)는 오른쪽 (자리 모자라면 크기 축소)
+    // 빈 하트(죽은 횟수)는 왼쪽부터, 보너스 하트는 오른쪽으로 계속 쌓임
+    // 한 줄(8개)이 넘으면 두 줄로 감싸고, 두 줄(16개)도 넘치면 그때만 축소
     livesEl.textContent = '♡'.repeat(state.deaths) + '♥'.repeat(Math.max(0, state.lives));
     const totalHearts = Math.max(1, state.lives + state.deaths);
-    livesEl.style.fontSize = (totalHearts > 8 ? Math.max(12, Math.round(240 / totalHearts)) : 30) + 'px';
+    livesEl.style.fontSize = (totalHearts <= 16 ? 30 : Math.max(12, Math.floor(30 * 16 / totalHearts))) + 'px';
   }
 
   function addScore(n) {
