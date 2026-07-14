@@ -567,7 +567,7 @@
 
   const state = {
     mode: 'ready',        // ready | play | pause | over | clear
-    score: 0, lives: 5, level: 1, combo: 0,
+    score: 0, lives: 5, deaths: 0, level: 1, combo: 0,
     paddle: { x: W / 2 - PADDLE_W / 2, w: PADDLE_W, h: 12, speed: Math.max(10, Math.round(W / 70)) },
     balls: [], bricks: [], particles: [], bullets: [], drops: [], fireworks: [], shake: 0,
     lastRecords: [],
@@ -585,6 +585,13 @@
     keys: { left: false, right: false },
     patternName: '',
   };
+
+  // 시뮬레이션 완급 — 초보 5초 → 프로 5초 → 잭팟 10초 순환 (20초 = 1200프레임)
+  let attractPhaseStart = 0, attractPhase = 'novice';
+  function getAttractPhase() {
+    const t = (state.tick - attractPhaseStart) % 1200;
+    return t < 300 ? 'novice' : t < 600 ? 'pro' : 'jackpot';
+  }
 
   function shotCost()     { return state.buffs.rapid > 0 ? 7 : 14; }
   function fireInterval() { return state.buffs.rapid > 0 ? 5 : 11; }
@@ -768,11 +775,14 @@
     state.paddle.h = Math.min(16, 4 + state.lives * 2);
     bestEl.textContent = best;
     levelEl.textContent = isBossLevel(state.level) ? state.level + ' BOSS' : state.level;
-    livesEl.textContent = '♥'.repeat(state.lives) + '♡'.repeat(Math.max(0, 5 - state.lives));
+    // 채워진 하트 = 남은 목숨, 빈 하트 = 죽은 횟수 (자리 모자라면 크기 축소)
+    livesEl.textContent = '♥'.repeat(Math.max(0, state.lives)) + '♡'.repeat(state.deaths);
+    const totalHearts = Math.max(1, state.lives + state.deaths);
+    livesEl.style.fontSize = (totalHearts > 8 ? Math.max(12, Math.round(240 / totalHearts)) : 30) + 'px';
   }
 
   function addScore(n) {
-    if (state.attract) return; // 데모 중엔 점수·기록·축포 없음
+    if (state.attract) { state.score += n; recentGain += n; return; } // 데모 — 점수는 움직이되 기록엔 미반영
     recentGain += n; // 클라이맥스 판정용 — 최근 득점 열기
     const before = state.score;
     state.score += n;
@@ -783,10 +793,10 @@
     // 200점 단위 돌파 → 축포!
     const crossed = Math.floor(state.score / 200) - Math.floor(before / 200);
     if (crossed > 0) celebrate(Math.floor(state.score / 200) * 200);
-    // 10000점 단위 돌파 → 하트 +1 + 팡파레!
-    const k1000 = Math.floor(state.score / 10000) - Math.floor(before / 10000);
+    // 30000점 단위 돌파 → 하트 +1 + 팡파레! (개수 제한 없음)
+    const k1000 = Math.floor(state.score / 30000) - Math.floor(before / 30000);
     if (k1000 > 0) {
-      state.lives = Math.min(8, state.lives + k1000); // 최대 8개
+      state.lives += k1000;
       sfx.fanfare();
       confettiBlast();
       for (let i = 0; i < 10; i++) {
@@ -797,7 +807,7 @@
           color: ROW_COLORS[Math.floor(Math.random() * ROW_COLORS.length)],
         });
       }
-      showToast('💖 ' + Math.floor(state.score / 10000) * 10000 + '점 돌파! 하트 +1!', '#ff5577');
+      showToast('💖 ' + Math.floor(state.score / 30000) * 30000 + '점 돌파! 하트 +1!', '#ff5577');
     }
     updateHud();
   }
@@ -1052,6 +1062,7 @@
       showToast('⚠ 패들 1/4 크기! 한 번 더 맞으면 -1 ♥', '#ff5555');
     } else {
       state.lives--;
+      state.deaths++;
       showToast('폭탄 피격! -1 ♥', '#ff5555');
       state.bombHits = 0;  // 목숨을 잃으며 패들 새것으로 복구
       state.ammo = { rapid: 0, bomb: 0 }; // 죽으면 저장 세트도 소멸
@@ -1126,17 +1137,51 @@
     if (state.keys.right) p.x += p.speed;
     p.x = Math.max(8, Math.min(W - p.w - 8, p.x));
 
-    // 데모 AI — 공을 쫓아다니며 가끔 레이저 발사
+    // 데모 AI — 완급: 초보(비틀비틀) → 프로(칼컨트롤) → 잭팟(축제)
     if (state.attract) {
+      const phase = getAttractPhase();
+      if (phase !== attractPhase) {
+        attractPhase = phase;
+        if (phase === 'novice') { state.score = 0; recentGain = 0; } // 새 사이클 — 점수 리셋
+        if (phase === 'jackpot') { confettiBlast(); triggerJackpot(); }
+      }
       let target = W / 2, bestY = -1;
       for (const b of state.balls) {
         if (b.vy > 0 && b.y > bestY) { bestY = b.y; target = b.x; }
       }
       if (bestY < 0 && state.balls[0]) target = state.balls[0].x;
-      p.x += (target - p.w / 2 - p.x) * 0.12;
+      if (phase === 'novice') {
+        target += Math.sin(state.tick * 0.05) * 100; // 초보 — 손이 비틀비틀
+        p.x += (target - p.w / 2 - p.x) * 0.045;     // 반응도 느림
+      } else {
+        p.x += (target - p.w / 2 - p.x) * 0.25;      // 프로 — 즉각 반응
+      }
       p.x = Math.max(8, Math.min(W - p.w - 8, p.x));
       if (state.mode === 'ready' && --state.attractWait <= 0) launch();
-      if (state.mode === 'play' && state.energy > 60 && Math.random() < 0.05) tryShoot();
+      if (state.mode === 'play') {
+        const fireRate = phase === 'novice' ? 0.012 : phase === 'pro' ? 0.12 : 0.3;
+        if (state.energy > 30 && Math.random() < fireRate) tryShoot();
+        if (phase === 'jackpot') {
+          // 잭팟 타임 — 4줄+고속 버프 폭풍 + 점수 샤워 + 폭죽·색종이
+          state.buffs.quad = Math.max(state.buffs.quad, 40);
+          state.buffs.rapid = Math.max(state.buffs.rapid, 40);
+          if (state.tick % 5 === 0) {
+            state.score += 40 + Math.floor(Math.random() * 140);
+            recentGain += 90; // 자리수 펑펑 폭발 유지
+          }
+          if (state.tick % 50 === 0) {
+            for (let i = 0; i < 3; i++) {
+              state.fireworks.push({
+                delay: i * 8,
+                x: 60 + Math.random() * (W - 120),
+                y: 80 + Math.random() * 300,
+                color: ROW_COLORS[Math.floor(Math.random() * ROW_COLORS.length)],
+              });
+            }
+          }
+          if (state.tick % 120 === 0) confettiBlast();
+        }
+      }
     }
 
     if (state.mode === 'ready') {
@@ -1338,6 +1383,7 @@
     if (state.balls.length === 0) {
       if (state.attract) { resetBall(true); state.attractWait = 40; return; } // 데모는 무한 재도전
       state.lives--;
+      state.deaths++;
       updateHud();
       sfx.lose();
       state.shake = 10;
@@ -1848,6 +1894,51 @@
         ctx.textAlign = 'center';
         ctx.fillText('클릭 또는 SPACE를 누르세요', W / 2, H / 2 + 52);
       }
+
+      // 시뮬레이션 완급 캡션
+      const ph = getAttractPhase();
+      ctx.textAlign = 'center';
+      if (ph === 'jackpot') {
+        const jp = 1 + Math.sin(state.tick * 0.25) * 0.12;
+        ctx.save();
+        ctx.translate(W / 2, H / 2 - 80);
+        ctx.scale(jp, jp);
+        ctx.fillStyle = '#ffc233';
+        ctx.shadowColor = '#ffc233';
+        ctx.shadowBlur = 22;
+        ctx.font = 'bold 30px Consolas, monospace';
+        ctx.fillText('🎆 JACKPOT TIME!! 🎆', 0, 0);
+        ctx.restore();
+        ctx.shadowBlur = 0;
+      } else {
+        ctx.fillStyle = '#5f7396';
+        ctx.font = '15px Consolas, monospace';
+        ctx.fillText(ph === 'novice' ? 'DEMO — 초보 모드 🐣' : 'DEMO — 프로 모드 😎', W / 2, H / 2 - 80);
+      }
+
+      // 아이템 안내 (범례)
+      const LEGEND = [
+        ['Q  4줄 레이저', '#ffc233'],
+        ['R  고속 연사 (+세트 적립)', '#22e6ff'],
+        ['B  폭탄 레이저 (+세트 적립)', '#ff3df0'],
+        ['W  패들 확장 / 손상 수리', '#2effc8'],
+        ['E  에너지 충전', '#c95cff'],
+        ['M  멀티볼', '#7f7bff'],
+        ['S  패들 축소 — 함정!', '#ff9a3d'],
+        ['💣 폭탄 — 피하거나 격추(+15점)', '#ff5555'],
+      ];
+      const legendY = H / 2 + 110;
+      ctx.fillStyle = '#5f7396';
+      ctx.font = '13px Consolas, monospace';
+      ctx.fillText('— 아이템 안내 —', W / 2, legendY - 28);
+      ctx.font = 'bold 15px Consolas, monospace';
+      ctx.textAlign = 'left';
+      for (let i = 0; i < LEGEND.length; i++) {
+        const col = i % 2, row = Math.floor(i / 2);
+        ctx.fillStyle = LEGEND[i][1];
+        ctx.fillText(LEGEND[i][0], W / 2 - 250 + col * 270, legendY + row * 30);
+      }
+      ctx.textAlign = 'center';
     }
 
     // 토스트 — 오버레이 위에 그려서 항상 보이게
@@ -1917,7 +2008,7 @@
   // 데모 종료 → 진짜 게임 시작
   function startRealGame() {
     state.attract = false;
-    state.score = 0; state.lives = 5; state.level = 1;
+    state.score = 0; state.lives = 5; state.deaths = 0; state.level = 1;
     state.energy = state.energyMax;
     state.ammo = { rapid: 0, bomb: 0 };
     state.fireworks = [];
@@ -1934,7 +2025,9 @@
   function enterAttract() {
     if (state.mode === 'entry') confirmEntry(); // 입력 중이던 기록은 저장하고 전환
     state.attract = true;
-    state.score = 0; state.lives = 5; state.level = 1;
+    attractPhaseStart = state.tick;
+    attractPhase = 'novice';
+    state.score = 0; state.lives = 5; state.deaths = 0; state.level = 1;
     state.energy = state.energyMax;
     state.ammo = { rapid: 0, bomb: 0 };
     state.fireworks = [];
@@ -1952,7 +2045,7 @@
     else if (state.mode === 'play') state.mode = 'pause';
     else if (state.mode === 'pause') state.mode = 'play';
     else if (state.mode === 'over') {
-      state.score = 0; state.lives = 5; state.level = 1;
+      state.score = 0; state.lives = 5; state.deaths = 0; state.level = 1;
       state.energy = state.energyMax;
       state.fireworks = [];
       state.hitFx = 0; state.freeze = 0;
