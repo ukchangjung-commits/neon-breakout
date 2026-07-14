@@ -638,6 +638,37 @@
   }
   function inNewGameBtn(x, y) { return inBtn(NEWGAME_BTN, x, y); }
 
+  // ---- 이니셜 릴 (슬롯머신 방식) — 0~9 + A~Z = 36자, 드래그/휠 회전 ----
+  const ENTRY_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const ENTRY_SLOT = { w: 62, h: 96, gap: 20, y: 392 };
+  let entryPos = [10, 10, 10];  // 릴의 연속 위치 (10 = 'A')
+  let entryVel = [0, 0, 0];     // 관성 속도
+  let entryDrag = null;         // { slot, lastY }
+  let entryActive = 0;          // 키보드 입력 대상 칸
+  function entrySlotRect(i) {
+    const startX = W / 2 - (ENTRY_SLOT.w * 3 + ENTRY_SLOT.gap * 2) / 2;
+    return { x: startX + i * (ENTRY_SLOT.w + ENTRY_SLOT.gap), y: ENTRY_SLOT.y, w: ENTRY_SLOT.w, h: ENTRY_SLOT.h };
+  }
+  function slotAtPoint(x, y) {
+    for (let i = 0; i < 3; i++) if (inBtn(entrySlotRect(i), x, y)) return i;
+    return -1;
+  }
+  function slotChar(i) {
+    const n = ENTRY_CHARS.length;
+    return ENTRY_CHARS[((Math.round(entryPos[i]) % n) + n) % n];
+  }
+  function entryNameNow() { return slotChar(0) + slotChar(1) + slotChar(2); }
+  function initEntryReels() {
+    // 마지막 사용 이니셜에서 시작 (이어하기 친화)
+    for (let i = 0; i < 3; i++) {
+      const ci = ENTRY_CHARS.indexOf((currentPlayer[i] || 'A').toUpperCase());
+      entryPos[i] = ci >= 0 ? ci : 10;
+      entryVel[i] = 0;
+    }
+    entryActive = 0;
+    entryDrag = null;
+  }
+
   // ---- 스테이지 벽돌 패턴 ----
   // include(r, c, rows, cols) → 해당 칸에 벽돌을 놓을지
   const PATTERNS = [
@@ -1000,6 +1031,8 @@
     state.mode = 'dying'; // 3초 종료 연출 → 이니셜 입력
     state.dyingT = 180;
     state.entryName = '';
+    initEntryReels();
+    if (document.exitPointerLock) document.exitPointerLock(); // 입력 화면에선 커서 표시
     state.shake = 18;
     // 패들 대폭발
     spawnParticles(state.paddle.x + state.paddle.w / 2, H - 34, '#22e6ff', 50, 3);
@@ -1008,7 +1041,8 @@
   }
 
   function confirmEntry() {
-    const name = state.entryName || '???';
+    const name = entryNameNow();
+    state.entryName = name; // 랭킹 하이라이트 판정용
     assignPlayerKills(name); // 이번 판 보스 킬을 이 이니셜에 귀속 (12지신 이어하기)
     saveRecord(name);
     state.lastRecords = loadRecords();
@@ -2055,34 +2089,66 @@
       ctx.font = 'bold 18px Consolas, monospace';
       ctx.fillText('이니셜을 입력하세요', W / 2, 380);
 
-      // 3칸 입력 박스 + 깜빡이는 커서
-      const boxW = 56, boxH = 66, gap = 16;
-      const startX = W / 2 - (boxW * 3 + gap * 2) / 2;
+      // 릴 물리 — 드래그 중이 아니면 관성 회전 → 감속 → 정수 스냅
       for (let i = 0; i < 3; i++) {
-        const bx = startX + i * (boxW + gap);
-        const active = i === state.entryName.length;
-        ctx.strokeStyle = active ? '#ffc233' : '#1d2b4d';
-        ctx.lineWidth = 2;
-        ctx.fillStyle = '#0d1426';
-        ctx.shadowColor = active ? '#ffc233' : 'transparent';
-        ctx.shadowBlur = active ? 12 : 0;
-        ctx.fillRect(bx, 410, boxW, boxH);
-        ctx.strokeRect(bx, 410, boxW, boxH);
-        ctx.shadowBlur = 0;
-        const chr = state.entryName[i];
-        if (chr) {
-          ctx.fillStyle = '#22e6ff';
-          ctx.font = 'bold 40px Consolas, monospace';
-          ctx.fillText(chr, bx + boxW / 2, 458);
-        } else if (active && Math.floor(state.tick / 25) % 2 === 0) {
-          ctx.fillStyle = '#ffc233';
-          ctx.fillRect(bx + boxW / 2 - 14, 452, 28, 4);
+        if (entryDrag && entryDrag.slot === i) continue;
+        if (Math.abs(entryVel[i]) > 0.003) {
+          entryPos[i] += entryVel[i];
+          entryVel[i] *= 0.94; // 휠 감속
+        } else {
+          entryVel[i] = 0;
+          const target = Math.round(entryPos[i]);
+          entryPos[i] += (target - entryPos[i]) * 0.3;
+          if (Math.abs(target - entryPos[i]) < 0.002) entryPos[i] = target;
         }
       }
+      // 릴 3개 — 위아래 이웃 문자가 비치는 슬롯머신 휠
+      const nCh = ENTRY_CHARS.length;
+      for (let i = 0; i < 3; i++) {
+        const r = entrySlotRect(i);
+        const active = i === entryActive;
+        ctx.fillStyle = '#0d1426';
+        ctx.strokeStyle = active ? '#ffc233' : '#1d2b4d';
+        ctx.lineWidth = 2;
+        ctx.shadowColor = active ? '#ffc233' : 'transparent';
+        ctx.shadowBlur = active ? 12 : 0;
+        ctx.beginPath();
+        ctx.roundRect(r.x, r.y, r.w, r.h, 10);
+        ctx.fill();
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(r.x + 2, r.y + 2, r.w - 4, r.h - 4);
+        ctx.clip();
+        const center = entryPos[i];
+        for (let k = Math.floor(center) - 2; k <= Math.floor(center) + 2; k++) {
+          const ch = ENTRY_CHARS[((k % nCh) + nCh) % nCh];
+          const yy = r.y + r.h / 2 + (k - center) * 42 + 12;
+          const dist = Math.abs(k - center);
+          ctx.globalAlpha = Math.max(0.08, 1 - dist * 0.75);
+          ctx.fillStyle = dist < 0.5 ? '#22e6ff' : '#5f7396';
+          ctx.font = 'bold 36px Consolas, monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText(ch, r.x + r.w / 2, yy);
+        }
+        ctx.globalAlpha = 1;
+        ctx.restore();
+        // 중앙 선택 창 표시선
+        ctx.strokeStyle = 'rgba(34, 230, 255, 0.25)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(r.x + 6, r.y + r.h / 2 - 21);
+        ctx.lineTo(r.x + r.w - 6, r.y + r.h / 2 - 21);
+        ctx.moveTo(r.x + 6, r.y + r.h / 2 + 21);
+        ctx.lineTo(r.x + r.w - 6, r.y + r.h / 2 + 21);
+        ctx.stroke();
+      }
 
+      ctx.textAlign = 'center';
       ctx.fillStyle = '#5f7396';
       ctx.font = '14px Consolas, monospace';
-      ctx.fillText('키보드로 입력 (최대 3자) · Backspace 지우기', W / 2, 512);
+      ctx.fillText('위아래 드래그·휠로 돌리기 (속도 감응) · 키보드 0~9 A~Z 직접 입력', W / 2, 512);
 
       // 클릭 가능한 버튼 3개 — 저장 / 닫기 / 새 게임
       drawUiButton(ENTRY_SAVE_BTN, '✔ 저장 (Enter)', '#22e6ff');
@@ -2493,9 +2559,17 @@
     if (state.mode === 'entry') {
       if (e.key === 'Enter') { confirmEntry(); }
       else if (e.key === 'Escape') { skipEntry(); } // 닫기 — 저장 안 함
-      else if (e.key === 'Backspace') { state.entryName = state.entryName.slice(0, -1); }
-      else if (e.key.length === 1 && e.key !== ' ' && state.entryName.length < 3) {
-        state.entryName += e.key.toUpperCase();
+      else if (e.key === 'Backspace' || e.key === 'ArrowLeft') { entryActive = Math.max(0, entryActive - 1); }
+      else if (e.key === 'ArrowRight') { entryActive = Math.min(2, entryActive + 1); }
+      else if (e.key === 'ArrowUp') { entryPos[entryActive] = Math.round(entryPos[entryActive]) - 1; entryVel[entryActive] = 0; }
+      else if (e.key === 'ArrowDown') { entryPos[entryActive] = Math.round(entryPos[entryActive]) + 1; entryVel[entryActive] = 0; }
+      else if (e.key.length === 1) {
+        const ci = ENTRY_CHARS.indexOf(e.key.toUpperCase());
+        if (ci >= 0) {
+          entryPos[entryActive] = ci;
+          entryVel[entryActive] = 0;
+          entryActive = Math.min(2, entryActive + 1);
+        }
       }
       e.preventDefault();
       return;
@@ -2547,10 +2621,19 @@
     // 이니셜 화면 — '새 게임' 버튼 위에서 손가락 커서
     if (state.mode === 'entry' && !pointerLocked) {
       const pt = canvasPoint(e);
+      // 릴 드래그 중 — 이동량만큼 회전 + 속도 기록 (관성용)
+      if (entryDrag) {
+        const dy = pt.y - entryDrag.lastY;
+        entryDrag.lastY = pt.y;
+        entryPos[entryDrag.slot] += dy / 42;   // 42px = 한 글자
+        entryVel[entryDrag.slot] = dy / 42;    // 마지막 속도 = 관성
+        canvas.style.cursor = 'grabbing';
+        return;
+      }
       const overBtn = inBtn(ENTRY_SAVE_BTN, pt.x, pt.y) ||
                       inBtn(ENTRY_CLOSE_BTN, pt.x, pt.y) ||
                       inBtn(NEWGAME_BTN, pt.x, pt.y);
-      canvas.style.cursor = overBtn ? 'pointer' : '';
+      canvas.style.cursor = overBtn ? 'pointer' : (slotAtPoint(pt.x, pt.y) >= 0 ? 'grab' : '');
       return; // 입력 화면에선 패들 안 움직임
     }
     // 데모 화면 — 난이도 박스 위에서 손가락 커서
@@ -2569,6 +2652,15 @@
     state.paddle.x = Math.max(8, Math.min(W - state.paddle.w - 8, state.paddle.x));
   });
   window.addEventListener('touchmove', (e) => {
+    if (entryDrag && state.mode === 'entry') { // 릴 터치 드래그
+      e.preventDefault();
+      const pt = canvasPoint(e);
+      const dy = pt.y - entryDrag.lastY;
+      entryDrag.lastY = pt.y;
+      entryPos[entryDrag.slot] += dy / 42;
+      entryVel[entryDrag.slot] = dy / 42;
+      return;
+    }
     if (state.mode === 'play' || state.mode === 'ready') e.preventDefault();
     state.paddle.x = pointFromEvent(e) - state.paddle.w / 2;
     state.paddle.x = Math.max(8, Math.min(W - state.paddle.w - 8, state.paddle.x));
@@ -2587,8 +2679,16 @@
       }
       requestLock(); startRealGame(); return;
     }
-    if (state.mode === 'entry') { // 이니셜 화면 — 버튼 3개만 클릭 반응
+    if (state.mode === 'entry') { // 이니셜 화면 — 릴 드래그 + 버튼 3개
       const pt = canvasPoint(e);
+      const si = slotAtPoint(pt.x, pt.y);
+      if (si >= 0) { // 릴 드래그 시작
+        entryDrag = { slot: si, lastY: pt.y };
+        entryActive = si;
+        entryVel[si] = 0;
+        canvas.style.cursor = 'grabbing';
+        return;
+      }
       if (inBtn(ENTRY_SAVE_BTN, pt.x, pt.y)) { canvas.style.cursor = ''; confirmEntry(); }
       else if (inBtn(ENTRY_CLOSE_BTN, pt.x, pt.y)) { canvas.style.cursor = ''; skipEntry(); }
       else if (inBtn(NEWGAME_BTN, pt.x, pt.y)) { canvas.style.cursor = ''; startRealGame(); }
@@ -2606,9 +2706,17 @@
     if (state.mode === 'over') {
       e.preventDefault();
       state.rankScroll += e.deltaY * 0.6;
+    } else if (state.mode === 'entry') {
+      e.preventDefault();
+      // 커서 아래 릴(없으면 활성 릴)을 휠로 회전 — 속도 감응 관성
+      const pt = canvasPoint(e);
+      const si = slotAtPoint(pt.x, pt.y);
+      const slot = si >= 0 ? si : entryActive;
+      if (si >= 0) entryActive = si;
+      entryVel[slot] += e.deltaY * 0.0035;
     }
   }, { passive: false });
-  document.addEventListener('mouseup', () => { state.firing = false; });
+  document.addEventListener('mouseup', () => { state.firing = false; entryDrag = null; });
   canvas.addEventListener('touchstart', (e) => {
     lastInputTick = state.tick;
     e.preventDefault();
@@ -2623,8 +2731,15 @@
       }
       startRealGame(); return;
     }
-    if (state.mode === 'entry') { // 터치 — 버튼 3개 동일 동작
+    if (state.mode === 'entry') { // 터치 — 릴 드래그 + 버튼 3개
       const pt = canvasPoint(e);
+      const si = slotAtPoint(pt.x, pt.y);
+      if (si >= 0) {
+        entryDrag = { slot: si, lastY: pt.y };
+        entryActive = si;
+        entryVel[si] = 0;
+        return;
+      }
       if (inBtn(ENTRY_SAVE_BTN, pt.x, pt.y)) confirmEntry();
       else if (inBtn(ENTRY_CLOSE_BTN, pt.x, pt.y)) skipEntry();
       else if (inBtn(NEWGAME_BTN, pt.x, pt.y)) startRealGame();
@@ -2633,7 +2748,7 @@
     if (state.mode === 'play') { state.firing = true; tryShoot(); }
     else onAction();
   }, { passive: false });
-  document.addEventListener('touchend', () => { state.firing = false; });
+  document.addEventListener('touchend', () => { state.firing = false; entryDrag = null; });
 
   // 도움말 토글
   const helpBtn = document.getElementById('helpBtn');
