@@ -117,17 +117,17 @@
   /* ---- 도움말 버튼 & 패널 ---- */
   .cabinet { position: relative; }
   #helpBtn, #muteBtn {
-    width: 30px; height: 30px;
+    width: 60px; height: 60px;
     border: 1px solid var(--line);
-    border-radius: 6px;
+    border-radius: 10px;
     background: var(--panel);
     color: var(--cyan);
-    font: bold 16px Consolas, 'Courier New', monospace;
+    font: bold 32px Consolas, 'Courier New', monospace;
     cursor: pointer;
     text-shadow: 0 0 8px rgba(34, 230, 255, 0.6);
     flex: none;
   }
-  #muteBtn { font-size: 14px; }
+  #muteBtn { font-size: 28px; }
   #helpBtn:hover, #muteBtn:hover { border-color: var(--cyan); box-shadow: 0 0 10px rgba(34, 230, 255, 0.35); }
   .help-panel {
     display: none;
@@ -160,7 +160,7 @@
     display: flex;
     justify-content: space-between;
     gap: 8px;
-    font-size: 13px;
+    font-size: 26px;
     padding: 10px 14px;
     background: var(--panel);
     border: 1px solid var(--line);
@@ -182,11 +182,24 @@
     pointer-events: none;
     white-space: nowrap;
   }
-  /* 세트 아이콘 — 스코어 바로 오른쪽 */
-  .ammo-panel { display: flex; flex-direction: column; gap: 4px; margin-left: 6px; }
+  /* 세트 아이콘 패널 — 탄창 줄 / 에너지 바 / 폭탄 줄 */
+  .ammo-panel { display: flex; flex-direction: column; gap: 4px; }
   .ammo-row { display: flex; gap: 3px; font-size: 15px; line-height: 1; }
   .ammo-row span { opacity: 0.15; filter: grayscale(1); transition: opacity 0.15s, filter 0.15s; }
   .ammo-row span.on { opacity: 1; filter: none; }
+  .energy-bar {
+    width: 100%;
+    height: 8px;
+    background: #101a30;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  #energyFill {
+    height: 100%;
+    width: 100%;
+    background: var(--amber);
+    box-shadow: 0 0 8px rgba(255, 194, 51, 0.6);
+  }
   .hud .score {
     color: var(--amber);
     text-shadow: 0 0 14px rgba(255, 194, 51, 0.65), 0 0 40px rgba(255, 194, 51, 0.35);
@@ -294,13 +307,14 @@
     </div>
     <div class="score-wrap">
       <span class="label">SCORE</span><span class="score" id="score">0</span>
-      <div class="ammo-panel" aria-hidden="true">
-        <div class="ammo-row" id="ammoRapid"></div>
-        <div class="ammo-row" id="ammoBomb"></div>
-      </div>
+      <span class="lives" id="lives">♥♥♥</span>
     </div>
     <div class="hud-side">
-      <span class="lives" id="lives">♥♥♥</span>
+      <div class="ammo-panel" aria-hidden="true">
+        <div class="ammo-row" id="ammoRapid"></div>
+        <div class="energy-bar"><div id="energyFill"></div></div>
+        <div class="ammo-row" id="ammoBomb"></div>
+      </div>
       <button id="muteBtn" title="소리 켜기/끄기" aria-label="음소거">🔊</button>
       <button id="helpBtn" title="조작법 보기" aria-label="도움말">?</button>
     </div>
@@ -1808,21 +1822,6 @@
       state.hitFx--;
     }
 
-    // 에너지 게이지 (하단)
-    const ew = 160, ex = W / 2 - ew / 2, ey = H - 14;
-    ctx.fillStyle = '#101a30';
-    ctx.fillRect(ex, ey, ew, 6);
-    const ratio = state.energy / state.energyMax;
-    ctx.fillStyle = state.energy < shotCost() ? '#ff3df0' : '#ffc233';
-    ctx.shadowColor = ctx.fillStyle;
-    ctx.shadowBlur = 8;
-    ctx.fillRect(ex, ey, ew * ratio, 6);
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = '#5f7396';
-    ctx.font = '10px Consolas, monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('ENERGY', W / 2, ey - 4);
-
     // 활성 버프 표시 (좌상단)
     let by = 16;
     ctx.textAlign = 'left';
@@ -2237,6 +2236,23 @@
     Array.from(ammoBombEl.children).forEach((el, i) => el.classList.toggle('on', i < lastAmmoB));
   }
 
+  // 에너지 바 (탄창·폭탄 아이콘 사이) — 변할 때만 DOM 갱신
+  const energyFill = document.getElementById('energyFill');
+  let lastEnergyPct = -1, lastEnergyLow = false;
+  function updateEnergyBar() {
+    const pct = Math.round((state.energy / state.energyMax) * 100);
+    const low = state.energy < shotCost();
+    if (pct !== lastEnergyPct) {
+      lastEnergyPct = pct;
+      energyFill.style.width = pct + '%';
+    }
+    if (low !== lastEnergyLow) {
+      lastEnergyLow = low;
+      energyFill.style.background = low ? '#ff3df0' : '#ffc233';
+      energyFill.style.boxShadow = '0 0 8px ' + (low ? 'rgba(255,61,240,0.6)' : 'rgba(255,194,51,0.6)');
+    }
+  }
+
   // ---- 12지신 링 카운터 — 박자(120 BPM ≈ 30프레임)마다 한 칸씩 점등 ----
   const zodiacRow = document.getElementById('zodiacSign');
   const zodiacEls = zodiacRow.querySelectorAll('.z');
@@ -2266,6 +2282,7 @@
     updateZodiac();
     updateScoreDisplay();
     updateAmmoPanel();
+    updateEnergyBar();
     requestAnimationFrame(loop);
   }
 
