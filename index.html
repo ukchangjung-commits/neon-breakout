@@ -623,12 +623,14 @@
   const PADDLE_NARROW = Math.round(PADDLE_W * 0.6);
   const MAX_BALLS = 9;
   const BALL_R = 7;
-  // 이니셜 화면의 '새 게임' 버튼 영역 (캔버스 좌표)
+  // 이니셜 화면의 버튼 영역들 (캔버스 좌표)
   const NEWGAME_BTN = { x: W / 2 - 115, y: 612, w: 230, h: 46 };
-  function inNewGameBtn(x, y) {
-    return x >= NEWGAME_BTN.x && x <= NEWGAME_BTN.x + NEWGAME_BTN.w &&
-           y >= NEWGAME_BTN.y && y <= NEWGAME_BTN.y + NEWGAME_BTN.h;
+  const ENTRY_SAVE_BTN = { x: W / 2 - 175, y: 532, w: 165, h: 48 };
+  const ENTRY_CLOSE_BTN = { x: W / 2 + 10, y: 532, w: 165, h: 48 };
+  function inBtn(r, x, y) {
+    return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
   }
+  function inNewGameBtn(x, y) { return inBtn(NEWGAME_BTN, x, y); }
 
   // ---- 스테이지 벽돌 패턴 ----
   // include(r, c, rows, cols) → 해당 칸에 벽돌을 놓을지
@@ -928,7 +930,7 @@
       score: state.score,
       level: state.level,
       when: new Date().toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' }) +
-            ' ' + new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+            ' ' + new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }),
     };
     const recs = loadRecords();
     recs.push(rec);
@@ -1546,6 +1548,24 @@
     checkLevelClear();
   }
 
+  // 캔버스 UI 버튼 공통 렌더러
+  function drawUiButton(r, label, color) {
+    ctx.fillStyle = '#0d1426';
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    ctx.roundRect(r.x, r.y, r.w, r.h, 10);
+    ctx.fill();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = color;
+    ctx.font = 'bold 17px Consolas, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, r.x + r.w / 2, r.y + r.h / 2 + 6);
+  }
+
   function drawBoss() {
     const boss = state.boss;
     if (!boss) return;
@@ -1942,32 +1962,16 @@
 
       ctx.fillStyle = '#5f7396';
       ctx.font = '14px Consolas, monospace';
-      ctx.fillText('키보드로 입력 (최대 3자) · Backspace 지우기', W / 2, 520);
-      ctx.fillStyle = '#cfe6ff';
-      ctx.font = 'bold 15px Consolas, monospace';
-      ctx.fillText('Enter — 저장', W / 2, 548);
-      ctx.fillStyle = '#5f7396';
-      ctx.font = '13px Consolas, monospace';
-      ctx.fillText('ESC — 저장하지 않고 닫기', W / 2, 574);
+      ctx.fillText('키보드로 입력 (최대 3자) · Backspace 지우기', W / 2, 512);
 
-      // 새 게임 버튼 (마우스 클릭 가능)
-      const nb = NEWGAME_BTN;
-      ctx.fillStyle = '#0d1426';
-      ctx.strokeStyle = '#2effc8';
-      ctx.lineWidth = 2;
-      ctx.shadowColor = '#2effc8';
-      ctx.shadowBlur = 12;
-      ctx.beginPath();
-      ctx.roundRect(nb.x, nb.y, nb.w, nb.h, 10);
-      ctx.fill();
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-      ctx.fillStyle = '#2effc8';
-      ctx.font = 'bold 18px Consolas, monospace';
-      ctx.fillText('▶ 새 게임 시작', W / 2, nb.y + 30);
+      // 클릭 가능한 버튼 3개 — 저장 / 닫기 / 새 게임
+      drawUiButton(ENTRY_SAVE_BTN, '✔ 저장 (Enter)', '#22e6ff');
+      drawUiButton(ENTRY_CLOSE_BTN, '✕ 닫기 (ESC)', '#ff9a3d');
+      drawUiButton(NEWGAME_BTN, '▶ 새 게임 시작', '#2effc8');
       ctx.fillStyle = '#5f7396';
       ctx.font = '12px Consolas, monospace';
-      ctx.fillText('(기록 저장 없이 바로 시작)', W / 2, nb.y + 66);
+      ctx.textAlign = 'center';
+      ctx.fillText('(새 게임 = 기록 저장 없이 바로 시작)', W / 2, NEWGAME_BTN.y + 66);
       ctx.restore();
       return;
     }
@@ -2035,20 +2039,23 @@
         if (isMe) {
           highlighted = true;
           ctx.fillStyle = 'rgba(255, 194, 51, 0.12)';
-          ctx.fillRect(W / 2 - 200, y - 20, 400, 28);
+          ctx.fillRect(W / 2 - 228, y - 20, 456, 28);
         }
         ctx.fillStyle = isMe ? '#ffc233' : (i === 0 ? '#ff3df0' : '#cfe6ff');
         ctx.font = (isMe ? 'bold ' : '') + '15px Consolas, monospace';
         ctx.textAlign = 'left';
-        ctx.fillText((i + 1) + '위', W / 2 - 185, y);
+        ctx.fillText((i + 1) + '위', W / 2 - 220, y);
         ctx.fillStyle = isMe ? '#ffc233' : '#22e6ff';
-        ctx.fillText(r.name || '---', W / 2 - 130, y);
+        ctx.fillText(r.name || '---', W / 2 - 160, y);
         ctx.fillStyle = isMe ? '#ffc233' : (i === 0 ? '#ff3df0' : '#cfe6ff');
         ctx.textAlign = 'right';
-        ctx.fillText(r.score + '점', W / 2 + 30, y);
+        ctx.fillText(r.score + '점', W / 2 + 15, y);
         ctx.fillStyle = isMe ? '#ffc233' : '#5f7396';
-        ctx.fillText('LV' + r.level, W / 2 + 95, y);
-        ctx.fillText(r.when || '', W / 2 + 185, y);
+        ctx.font = '13px Consolas, monospace';
+        ctx.fillText('LV' + r.level, W / 2 + 90, y);
+        // 날짜는 축약(오전/오후 제거)해서 겹침 방지
+        ctx.font = '12px Consolas, monospace';
+        ctx.fillText((r.when || '').replace('오전 ', '').replace('오후 ', ''), W / 2 + 220, y);
         ctx.textAlign = 'center';
       }
       ctx.restore();
@@ -2420,7 +2427,10 @@
     // 이니셜 화면 — '새 게임' 버튼 위에서 손가락 커서
     if (state.mode === 'entry' && !pointerLocked) {
       const pt = canvasPoint(e);
-      canvas.style.cursor = inNewGameBtn(pt.x, pt.y) ? 'pointer' : '';
+      const overBtn = inBtn(ENTRY_SAVE_BTN, pt.x, pt.y) ||
+                      inBtn(ENTRY_CLOSE_BTN, pt.x, pt.y) ||
+                      inBtn(NEWGAME_BTN, pt.x, pt.y);
+      canvas.style.cursor = overBtn ? 'pointer' : '';
       return; // 입력 화면에선 패들 안 움직임
     }
     // 데모 화면 — 난이도 박스 위에서 손가락 커서
@@ -2457,9 +2467,11 @@
       }
       requestLock(); startRealGame(); return;
     }
-    if (state.mode === 'entry') { // 이니셜 화면 — '새 게임' 버튼만 클릭 반응
+    if (state.mode === 'entry') { // 이니셜 화면 — 버튼 3개만 클릭 반응
       const pt = canvasPoint(e);
-      if (inNewGameBtn(pt.x, pt.y)) { canvas.style.cursor = ''; startRealGame(); }
+      if (inBtn(ENTRY_SAVE_BTN, pt.x, pt.y)) { canvas.style.cursor = ''; confirmEntry(); }
+      else if (inBtn(ENTRY_CLOSE_BTN, pt.x, pt.y)) { canvas.style.cursor = ''; skipEntry(); }
+      else if (inBtn(NEWGAME_BTN, pt.x, pt.y)) { canvas.style.cursor = ''; startRealGame(); }
       return;
     }
     if (e.button === 1) { e.preventDefault(); useAmmoSet('rapid'); return; } // 휠클릭 — 탄창
@@ -2491,10 +2503,11 @@
       }
       startRealGame(); return;
     }
-    if (state.mode === 'entry') { // 터치 — 버튼 탭 = 새 게임, 그 외 탭 = 저장 (키보드 없는 기기용)
+    if (state.mode === 'entry') { // 터치 — 버튼 3개 동일 동작
       const pt = canvasPoint(e);
-      if (inNewGameBtn(pt.x, pt.y)) startRealGame();
-      else confirmEntry();
+      if (inBtn(ENTRY_SAVE_BTN, pt.x, pt.y)) confirmEntry();
+      else if (inBtn(ENTRY_CLOSE_BTN, pt.x, pt.y)) skipEntry();
+      else if (inBtn(NEWGAME_BTN, pt.x, pt.y)) startRealGame();
       return;
     }
     if (state.mode === 'play') { state.firing = true; tryShoot(); }
