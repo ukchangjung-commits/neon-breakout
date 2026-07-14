@@ -922,8 +922,8 @@
     state.paddle.h = Math.min(16, 4 + state.lives * 2);
     bestEl.textContent = best;
     levelEl.textContent = isBossLevel(state.level) ? state.level + ' BOSS' : state.level;
-    // 채워진 하트 = 남은 목숨, 빈 하트 = 죽은 횟수 (자리 모자라면 크기 축소)
-    livesEl.textContent = '♥'.repeat(Math.max(0, state.lives)) + '♡'.repeat(state.deaths);
+    // 빈 하트(죽은 횟수)는 왼쪽부터, 채워진 하트(남은 목숨)는 오른쪽 (자리 모자라면 크기 축소)
+    livesEl.textContent = '♡'.repeat(state.deaths) + '♥'.repeat(Math.max(0, state.lives));
     const totalHearts = Math.max(1, state.lives + state.deaths);
     livesEl.style.fontSize = (totalHearts > 8 ? Math.max(12, Math.round(240 / totalHearts)) : 30) + 'px';
   }
