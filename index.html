@@ -850,8 +850,12 @@
     recs.push(rec);
     recs.sort((a, b) => b.score - a.score);
     localStorage.setItem(REC_KEY, JSON.stringify(recs.slice(0, 20)));
+    localTopCache = recs.slice(0, 3); // 데모 화면 TOP 3 갱신
     cloudSave(rec); // 클라우드 랭킹에도 저장 (미설정 시 무시)
   }
+
+  // 데모 화면 하단 TOP 3용 로컬 캐시
+  let localTopCache = loadRecords().slice(0, 3);
 
   // ---- Firebase 글로벌 랭킹 ----
   // 설정이 없거나(null) 외부 접속이 차단된 환경에선 자동으로 로컬 기록만 사용
@@ -2050,6 +2054,24 @@
         ctx.fillText(LEGEND[i][0], W / 2 - 250 + col * 270, legendY + row * 30);
       }
       ctx.textAlign = 'center';
+
+      // 랭킹 TOP 3 (하단) — 글로벌 우선, 없으면 로컬
+      const ranks = (cloudTop && cloudTop.length ? cloudTop : localTopCache).slice(0, 3);
+      if (ranks.length) {
+        const ry = H - 165;
+        ctx.fillStyle = '#5f7396';
+        ctx.font = '13px Consolas, monospace';
+        ctx.fillText(fdb ? '— 🏆 글로벌 랭킹 TOP 3 —' : '— 🏆 랭킹 TOP 3 —', W / 2, ry - 28);
+        const medals = ['🥇', '🥈', '🥉'];
+        const rankColors = ['#ffd700', '#c0c0c0', '#cd7f32'];
+        for (let i = 0; i < ranks.length; i++) {
+          ctx.fillStyle = rankColors[i];
+          ctx.font = (i === 0 ? 'bold 21px' : 'bold 17px') + ' Consolas, monospace';
+          ctx.fillText(
+            medals[i] + ' ' + (ranks[i].name || '---') + '  ' + ranks[i].score + '점',
+            W / 2, ry + i * 30);
+        }
+      }
     }
 
     // 토스트 — 오버레이 위에 그려서 항상 보이게
@@ -2146,6 +2168,7 @@
     state.bombHits = 0;
     recentGain = 0; digitBurstUntil = 0;
     state.attractWait = 40;
+    localTopCache = loadRecords().slice(0, 3); // 데모 랭킹 갱신
     buildLevel(); resetBall(); updateHud();
   }
 
