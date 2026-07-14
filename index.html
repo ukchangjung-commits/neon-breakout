@@ -337,7 +337,9 @@
     <span style="color:#c95cff">E</span> 에너지충전 ·
     <span style="color:#7f7bff">M</span> 멀티볼 ·
     <span style="color:#ff9a3d">S</span> <b>패들 축소(함정!)</b> ·
-    레벨마다 벽돌 패턴이 바뀌고 <b style="color:#ff5555">4레벨마다 보스전!</b>
+    레벨마다 벽돌 패턴이 바뀌고 <b style="color:#ff5555">4레벨마다 보스전!</b><br>
+    보스는 잡을수록 모습이 변합니다(480종). 벽에 튕길 때마다 눈 색이 바뀌는데,
+    <b>눈이 몸 색과 같아지면(10%) 반사 모드</b> — 공격이 무효가 되고 <b style="color:#ff5555">데미지만큼 폭탄으로 반격</b>합니다. 눈 색이 풀릴 때를 노리세요!
   </div>
 </div>
 
@@ -601,6 +603,10 @@
     fanfare:() => { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => beep(f, 0.18, 'square', 0.07), i * 110)); },
     gameOver:() => { [784, 659, 523, 392, 262, 196].forEach((f, i) => setTimeout(() => beep(f, 0.3, 'square', 0.07, -25), i * 230)); },
     bossHit:() => beep(140, 0.1, 'sawtooth', 0.06, 60),
+    // 반사 모드 진입 — 낮게 웅- 하는 경고
+    reflectOn: () => { if (!audio) return; const t = audio.currentTime; tone(160, t, 0.3, 'sawtooth', 0.06, 40); tone(320, t, 0.3, 'sine', 0.05, 60); },
+    // 공격 반사 — 쨍! 금속성 핑
+    reflect: () => { if (!audio) return; const t = audio.currentTime; tone(1400, t, 0.12, 'square', 0.05, -400); noise(t, 0.06, 0.04, 4500); },
     bossDie:() => { beep(120, 0.4, 'sawtooth', 0.1, -80); setTimeout(() => beep(523, 0.15, 'square', 0.07), 300); setTimeout(() => beep(784, 0.3, 'square', 0.07), 460); },
     clear:  () => { beep(523, 0.12, 'square', 0.06); setTimeout(() => beep(659, 0.12, 'square', 0.06), 120); setTimeout(() => beep(784, 0.2, 'square', 0.06), 240); },
   };
@@ -703,12 +709,20 @@
       // ---- 보스전: 보스 + 체커 실드 2줄 ----
       state.patternName = 'BOSS';
       const hp = 60 + state.level * 15;
-      const bossW = Math.max(220, Math.round(W * 0.22)); // 화면 폭에 비례
+      // 보스 변형 — 현재 이니셜의 킬 수로 결정 (48변형 × 10색, 색 단계마다 6% 축소)
+      const tierIdx = Math.floor(bossKills / 48) % 10;
+      const bScale = 1 - tierIdx * 0.06;
+      const bossW = Math.max(130, Math.round(W * 0.22 * bScale));
       state.boss = {
-        x: W / 2 - bossW / 2, y: 90, w: bossW, h: 54,
+        x: W / 2 - bossW / 2, y: 90, w: bossW, h: Math.round(54 * bScale),
         hp, maxHp: hp,
         vx: (2.2 + state.level * 0.1) * Math.max(1, W / 720),
         fireTimer: 100, hurt: 0,
+        variant: bossKills % 48,                     // 뿔·눈·이빨 변형
+        scale: bScale,
+        tierColor: tierIdx === 0 ? '#4a4a4a' : RESISTOR_COLORS[tierIdx], // 흑색은 식별용으로 밝게
+        eyeColor: '#ff2020',                          // 시작은 빨강 — 첫 반동부터 룰렛
+        reflect: false,                               // 자기색 눈 = 데미지 반사 모드
       };
       for (let r = 0; r < 2; r++) {
         for (let c = 0; c < cols; c++) {
@@ -1105,6 +1119,19 @@
   function damageBoss(dmg, x, y) {
     const boss = state.boss;
     if (!boss) return;
+    // 자기색 눈(반사 모드) — 데미지 무효 + 데미지만큼 폭탄으로 반환 (최대 3개)
+    if (boss.reflect) {
+      const n = Math.min(3, Math.max(1, dmg));
+      for (let i = 0; i < n; i++) {
+        spawnDrop(
+          Math.max(20, Math.min(W - 20, x + (Math.random() - 0.5) * 140)),
+          boss.y + boss.h + 6, true);
+      }
+      spawnParticles(x, y, boss.tierColor, 12, 1.4);
+      state.shake = Math.max(state.shake, 4);
+      sfx.reflect();
+      return;
+    }
     boss.hp -= dmg;
     boss.hurt = 6;
     addScore(dmg * 2);
@@ -1395,7 +1422,19 @@
     const boss = state.boss;
     if (boss) {
       boss.x += boss.vx;
-      if (boss.x < 16 || boss.x + boss.w > W - 16) boss.vx = -boss.vx;
+      if (boss.x < 16 || boss.x + boss.w > W - 16) {
+        boss.vx = -boss.vx;
+        boss.x = Math.max(16, Math.min(W - 16 - boss.w, boss.x));
+        // 눈 색 룰렛 — 방향을 바꿀 때마다 랜덤, 10% 확률로 자기색(반사 모드)
+        if (Math.random() < 0.10) {
+          boss.eyeColor = boss.tierColor;
+          boss.reflect = true;
+          sfx.reflectOn();
+        } else {
+          boss.eyeColor = ROW_COLORS[Math.floor(Math.random() * ROW_COLORS.length)];
+          boss.reflect = false;
+        }
+      }
       if (boss.hurt > 0) boss.hurt--;
       boss.fireTimer--;
       if (boss.fireTimer <= 0) {
@@ -1570,56 +1609,120 @@
     const boss = state.boss;
     if (!boss) return;
     const hpRatio = boss.hp / boss.maxHp;
-    const bodyColor = boss.hurt > 0 ? '#ffffff' : (hpRatio < 0.3 ? '#ff5555' : '#ff3df0');
+    const sc = boss.scale;
+    const round = Math.floor(boss.variant / 12); // 0~3 — 12지신 바퀴
+    const idx = boss.variant % 12;               // 0~11 — 바퀴 내 순번
+    const bodyColor = boss.hurt > 0 ? '#ffffff' : boss.tierColor;
+    const bx0 = boss.x, by0 = boss.y, bw0 = boss.w, bh0 = boss.h;
 
-    // 몸통
+    // 반사 모드 — 자기색 오라 링 (경고)
+    if (boss.reflect) {
+      const pulse = 0.6 + 0.4 * Math.sin(state.tick * 0.2);
+      ctx.strokeStyle = boss.tierColor;
+      ctx.globalAlpha = 0.5 + pulse * 0.4;
+      ctx.lineWidth = 3;
+      ctx.shadowColor = boss.tierColor;
+      ctx.shadowBlur = 20;
+      ctx.beginPath();
+      ctx.roundRect(bx0 - 8, by0 - 8, bw0 + 16, bh0 + 16, 18);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
+    }
+
+    // 몸통 — 바퀴가 돌수록 각져짐
+    const rad = [20, 13, 7, 3][round] * sc;
     ctx.fillStyle = '#12081a';
     ctx.strokeStyle = bodyColor;
     ctx.lineWidth = 3;
-    ctx.shadowColor = bodyColor;
+    ctx.shadowColor = hpRatio < 0.3 ? '#ff5555' : bodyColor;
     ctx.shadowBlur = 22;
-    const r = 14;
     ctx.beginPath();
-    ctx.roundRect(boss.x, boss.y, boss.w, boss.h, r);
+    ctx.roundRect(bx0, by0, bw0, bh0, rad);
     ctx.fill();
     ctx.stroke();
     ctx.shadowBlur = 0;
 
-    // 눈 — 패들을 노려봄
-    const eyeX = boss.x + boss.w / 2;
-    const eyeY = boss.y + boss.h / 2;
-    const dx = (state.paddle.x + state.paddle.w / 2) - eyeX;
-    const look = Math.max(-8, Math.min(8, dx * 0.02));
-    ctx.fillStyle = '#0a0510';
-    ctx.beginPath();
-    ctx.ellipse(eyeX, eyeY, 26, 16, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = bodyColor;
-    ctx.shadowColor = bodyColor;
-    ctx.shadowBlur = 12;
-    ctx.beginPath();
-    ctx.arc(eyeX + look, eyeY, 7, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
+    // 뿔 — idx개, 위 가장자리 균등 배치
+    if (idx > 0) {
+      ctx.fillStyle = bodyColor;
+      for (let s = 0; s < idx; s++) {
+        const hx = bx0 + bw0 * (s + 1) / (idx + 1);
+        const hh = (9 + (s % 3) * 4) * sc;
+        ctx.beginPath();
+        ctx.moveTo(hx - 5 * sc, by0 + 1);
+        ctx.lineTo(hx, by0 - hh);
+        ctx.lineTo(hx + 5 * sc, by0 + 1);
+        ctx.fill();
+      }
+    }
 
-    // 포탑 장식
-    ctx.fillStyle = bodyColor;
-    ctx.fillRect(boss.x + 20, boss.y + boss.h - 4, 12, 8);
-    ctx.fillRect(boss.x + boss.w - 32, boss.y + boss.h - 4, 12, 8);
+    // 옆 지느러미 — 3바퀴째(25마리~)부터
+    if (round >= 2) {
+      ctx.fillStyle = bodyColor;
+      ctx.globalAlpha = 0.55;
+      const finH = (round === 2 ? 14 : 22) * sc;
+      ctx.beginPath();
+      ctx.moveTo(bx0, by0 + bh0 * 0.3);
+      ctx.lineTo(bx0 - finH, by0 + bh0 * 0.55);
+      ctx.lineTo(bx0, by0 + bh0 * 0.8);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(bx0 + bw0, by0 + bh0 * 0.3);
+      ctx.lineTo(bx0 + bw0 + finH, by0 + bh0 * 0.55);
+      ctx.lineTo(bx0 + bw0, by0 + bh0 * 0.8);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
 
-    // HP 바
+    // 눈 — round+1개, 룰렛 색상, 눈동자는 패들을 쫓음
+    const eyes = round + 1;
+    const eyeR = (eyes === 1 ? 11 : 7.5) * sc;
+    const dx = (state.paddle.x + state.paddle.w / 2) - (bx0 + bw0 / 2);
+    const look = Math.max(-6, Math.min(6, dx * 0.02));
+    for (let e = 0; e < eyes; e++) {
+      const ex = bx0 + bw0 / 2 + (e - (eyes - 1) / 2) * (eyeR * 3.4);
+      const ey = by0 + bh0 * 0.45;
+      ctx.fillStyle = '#0a0510';
+      ctx.beginPath();
+      ctx.ellipse(ex, ey, eyeR * 1.8, eyeR * 1.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = boss.eyeColor;
+      ctx.shadowColor = boss.eyeColor;
+      ctx.shadowBlur = boss.reflect ? 18 : 10;
+      ctx.beginPath();
+      ctx.arc(ex + look, ey, eyeR * 0.65, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+
+    // 이빨 — 아래 가장자리, 2 + idx%5 개
+    const teeth = 2 + (idx % 5);
+    ctx.fillStyle = bodyColor;
+    ctx.globalAlpha = 0.85;
+    for (let t = 0; t < teeth; t++) {
+      const tx = bx0 + bw0 * (t + 1) / (teeth + 1);
+      ctx.beginPath();
+      ctx.moveTo(tx - 4 * sc, by0 + bh0 - 1);
+      ctx.lineTo(tx, by0 + bh0 + 8 * sc);
+      ctx.lineTo(tx + 4 * sc, by0 + bh0 - 1);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    // HP 바 — 단계 색상
     const bw = 300, bx = W / 2 - bw / 2, by = 30;
     ctx.fillStyle = '#101a30';
     ctx.fillRect(bx, by, bw, 10);
-    ctx.fillStyle = hpRatio < 0.3 ? '#ff5555' : '#ff3df0';
+    ctx.fillStyle = hpRatio < 0.3 ? '#ff5555' : boss.tierColor;
     ctx.shadowColor = ctx.fillStyle;
     ctx.shadowBlur = 8;
     ctx.fillRect(bx, by, bw * Math.max(0, hpRatio), 10);
     ctx.shadowBlur = 0;
-    ctx.fillStyle = '#cfe6ff';
+    ctx.fillStyle = boss.reflect ? boss.tierColor : '#cfe6ff';
     ctx.font = 'bold 12px Consolas, monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('BOSS', W / 2, by - 6);
+    ctx.fillText(boss.reflect ? 'BOSS — 반사 중!' : 'BOSS #' + (bossKills + 1), W / 2, by - 6);
   }
 
   function draw() {
