@@ -1861,7 +1861,7 @@
       ctx.fillText('키보드로 입력 (최대 3자) · Backspace 지우기', W / 2, 520);
       ctx.fillStyle = '#cfe6ff';
       ctx.font = 'bold 15px Consolas, monospace';
-      ctx.fillText('Enter 또는 클릭으로 저장', W / 2, 548);
+      ctx.fillText('Enter — 저장', W / 2, 548);
       ctx.fillStyle = '#5f7396';
       ctx.font = '13px Consolas, monospace';
       ctx.fillText('ESC — 저장하지 않고 닫기', W / 2, 574);
@@ -2134,7 +2134,7 @@
   function onAction() {
     ensureAudio();
     if (state.mode === 'dying') { state.dyingT = 0; state.mode = 'entry'; return; } // 연출 건너뛰기
-    if (state.mode === 'entry') { confirmEntry(); return; }
+    if (state.mode === 'entry') return; // 이니셜 화면은 클릭으로 닫히지 않음 (Enter 저장 / ESC 닫기)
     if (state.mode === 'ready') launch();
     else if (state.mode === 'play') state.mode = 'pause';
     else if (state.mode === 'pause') state.mode = 'play';
@@ -2238,6 +2238,7 @@
     e.preventDefault();
     ensureAudio();
     if (state.attract) { startRealGame(); return; }
+    if (state.mode === 'entry') { confirmEntry(); return; } // 터치 기기는 키보드가 없어 탭 = 저장
     if (state.mode === 'play') { state.firing = true; tryShoot(); }
     else onAction();
   }, { passive: false });
