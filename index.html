@@ -351,9 +351,37 @@
   let best = Number(localStorage.getItem(BEST_KEY) || 0);
   bestEl.textContent = best;
 
-  // 보스 격파 트로피 — 12지신 × 4회전(48) × 저항 색띠 10색 = 480마리 (영구 저장)
-  const BOSSKILL_KEY = 'neon-breakout-bosskills';
-  let bossKills = Number(localStorage.getItem(BOSSKILL_KEY) || 0);
+  // 보스 격파 트로피 — 12지신 × 4회전(48) × 저항 색띠 10색 = 480마리
+  // 이니셜별로 저장 — 같은 이니셜을 입력하면 12지신 진행 상태를 이어서 함
+  const BOSSMAP_KEY = 'neon-breakout-bossmap';
+  const PLAYER_KEY = 'neon-breakout-player';
+  let bossMap = {};
+  try { bossMap = JSON.parse(localStorage.getItem(BOSSMAP_KEY)) || {}; } catch (e) {}
+  let currentPlayer = localStorage.getItem(PLAYER_KEY) || '???';
+  // 구버전 전역 카운트 → 현재 플레이어로 1회 이전
+  const legacyKills = Number(localStorage.getItem('neon-breakout-bosskills') || 0);
+  if (legacyKills > 0 && !(currentPlayer in bossMap)) {
+    bossMap[currentPlayer] = legacyKills;
+    localStorage.removeItem('neon-breakout-bosskills');
+    localStorage.setItem(BOSSMAP_KEY, JSON.stringify(bossMap));
+  }
+  let bossKills = bossMap[currentPlayer] || 0;
+  function saveBossMap() {
+    bossMap[currentPlayer] = bossKills;
+    localStorage.setItem(BOSSMAP_KEY, JSON.stringify(bossMap));
+  }
+  // 이니셜 입력 시 — 이번 판 킬을 그 이니셜에게 귀속하고 진행 상태 이어받기
+  function assignPlayerKills(name) {
+    if (name !== currentPlayer) {
+      bossMap[currentPlayer] = Math.max(0, (bossMap[currentPlayer] || 0) - state.runKills);
+      currentPlayer = name;
+      localStorage.setItem(PLAYER_KEY, name);
+      bossKills = (bossMap[name] || 0) + state.runKills;
+      saveBossMap();
+      applyBossTrophies();
+    }
+    state.runKills = 0;
+  }
   // 저항 색띠: 흑 갈 적 등 황 녹 청 자 회 백
   const RESISTOR_COLORS = ['#1a1a1a', '#8b4513', '#ff2020', '#ff8c00', '#ffd700',
                            '#00c853', '#2979ff', '#9400d3', '#9e9e9e', '#ffffff'];
@@ -581,6 +609,8 @@
     entryName: '', tick: 0,
     hitFx: 0, hitFxX: 0, freeze: 0,
     dyingT: 0, // 게임 종료 연출 남은 프레임
+    rankScroll: 0, // 게임오버 랭킹 스크롤 위치
+    runKills: 0, // 이번 판 보스 격파 수 (이니셜 귀속용)
     boss: null,
     buffs: { quad: 0, rapid: 0, bomb: 0, wide: 0, narrow: 0 },
     bombHits: 0, // 폭탄 피격 누적 — 1: 절반, 2: 빨간 경고, 3: 목숨 -1
@@ -867,7 +897,7 @@
     messagingSenderId: '532059137459',
     appId: '1:532059137459:web:6f0b91779cfc1ca9d917c6',
   };
-  let fdb = null, fsm = null, cloudTop = null;
+  let fdb = null, fsm = null, cloudTop = null, cloudAll = null;
   async function initCloud() {
     if (!FIREBASE_CONFIG) return;
     try {
@@ -888,9 +918,10 @@
     if (!fdb) return;
     try {
       const snap = await fsm.getDocs(fsm.query(
-        fsm.collection(fdb, 'scores'), fsm.orderBy('score', 'desc'), fsm.limit(5)));
-      cloudTop = snap.docs.map(d => d.data());
-      if (state.mode === 'over' && cloudTop.length) state.lastRecords = cloudTop;
+        fsm.collection(fdb, 'scores'), fsm.orderBy('score', 'desc'), fsm.limit(100)));
+      cloudAll = snap.docs.map(d => d.data());
+      cloudTop = cloudAll.slice(0, 5);
+      if (state.mode === 'over' && cloudAll.length) state.lastRecords = cloudAll;
     } catch (e) {}
   }
   initCloud();
@@ -907,9 +938,12 @@
   }
 
   function confirmEntry() {
-    saveRecord(state.entryName || '???');
-    state.lastRecords = loadRecords().slice(0, 5);
-    if (cloudTop && cloudTop.length) state.lastRecords = cloudTop; // 글로벌 랭킹 우선
+    const name = state.entryName || '???';
+    assignPlayerKills(name); // 이번 판 보스 킬을 이 이니셜에 귀속 (12지신 이어하기)
+    saveRecord(name);
+    state.lastRecords = loadRecords();
+    if (cloudAll && cloudAll.length) state.lastRecords = cloudAll; // 글로벌 전체 랭킹 우선
+    state.rankScroll = 0;
     state.mode = 'over';
     sfx.item();
   }
@@ -1030,11 +1064,12 @@
       state.boss = null;
       state.mode = 'clear';
       sfx.bossDie();
-      // 보스 격파 트로피 — 12지신 하나 90도 회전
+      // 보스 격파 트로피 — 12지신 하나 90도 회전 (현재 이니셜에 귀속)
       bossKills++;
-      localStorage.setItem(BOSSKILL_KEY, bossKills);
+      state.runKills++;
+      saveBossMap();
       applyBossTrophies();
-      showToast('🏆 보스 격파 ' + bossKills + '마리 — 12지신 각인!', '#ffd700');
+      showToast('🏆 ' + currentPlayer + ' 보스 ' + bossKills + '마리 — 12지신 각인!', '#ffd700');
       updateHud();
     }
   }
@@ -1930,16 +1965,32 @@
         ctx.fillText('최고 기록 ' + best + '점 · 도달 레벨 ' + state.level, W / 2, 348);
       }
 
-      // TOP 5 기록표
-      const recs = state.lastRecords;
+      // 전체 랭킹 (마우스 휠 스크롤)
+      const recs = state.lastRecords || [];
       const panelY = 400, rowH = 34;
       ctx.fillStyle = '#cfe6ff';
       ctx.font = 'bold 16px Consolas, monospace';
-      ctx.fillText(fdb ? '— 글로벌 TOP 5 —' : '— TOP 5 기록 —', W / 2, panelY);
+      ctx.fillText(
+        (fdb ? '— 글로벌 랭킹 · 참가자 ' : '— 랭킹 · 기록 ') + recs.length + '명 —',
+        W / 2, panelY);
+      const listTop = panelY + 16;
+      const listH = H - listTop - 85;
+      const maxScroll = Math.max(0, recs.length * rowH - listH + 10);
+      state.rankScroll = Math.max(0, Math.min(state.rankScroll, maxScroll));
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(W / 2 - 235, listTop, 470, listH);
+      ctx.clip();
       let highlighted = false;
       for (let i = 0; i < recs.length; i++) {
         const r = recs[i];
-        const y = panelY + 34 + i * rowH;
+        const y = listTop + 26 + i * rowH - state.rankScroll;
+        if (y < listTop - 12 || y > listTop + listH + 22) {
+          // 화면 밖 행은 건너뛰되 하이라이트 판정은 유지
+          if (!highlighted && r.score === state.score && r.level === state.level &&
+              r.name === (state.entryName || '???')) highlighted = true;
+          continue;
+        }
         const isMe = !highlighted && r.score === state.score && r.level === state.level &&
                      r.name === (state.entryName || '???');
         if (isMe) {
@@ -1961,10 +2012,23 @@
         ctx.fillText(r.when || '', W / 2 + 185, y);
         ctx.textAlign = 'center';
       }
+      ctx.restore();
+      // 스크롤바
+      if (maxScroll > 0) {
+        ctx.fillStyle = '#101a30';
+        ctx.fillRect(W / 2 + 242, listTop, 6, listH);
+        const thumbH = Math.max(30, listH * (listH / (recs.length * rowH)));
+        const thumbY = listTop + (listH - thumbH) * (state.rankScroll / maxScroll);
+        ctx.fillStyle = '#22e6ff';
+        ctx.fillRect(W / 2 + 242, thumbY, 6, thumbH);
+        ctx.fillStyle = '#5f7396';
+        ctx.font = '12px Consolas, monospace';
+        ctx.fillText('마우스 휠로 스크롤', W / 2, listTop + listH + 22);
+      }
 
       ctx.fillStyle = '#cfe6ff';
       ctx.font = '15px Consolas, monospace';
-      ctx.fillText('SPACE로 다시 시작', W / 2, panelY + 34 + Math.max(recs.length, 1) * rowH + 30);
+      ctx.fillText('SPACE로 다시 시작', W / 2, H - 30);
       ctx.restore();
       return;
     }
@@ -2147,6 +2211,7 @@
     state.fireworks = [];
     state.hitFx = 0; state.freeze = 0;
     state.bombHits = 0;
+    state.runKills = 0; state.rankScroll = 0;
     recentGain = 0; digitBurstUntil = 0;
     lastInputTick = state.tick;
     buildLevel(); resetBall(); updateHud();
@@ -2168,14 +2233,17 @@
     state.bombHits = 0;
     recentGain = 0; digitBurstUntil = 0;
     state.attractWait = 40;
+    state.runKills = 0;
     localTopCache = loadRecords().slice(0, 3); // 데모 랭킹 갱신
     buildLevel(); resetBall(); updateHud();
   }
 
-  // 이니셜 저장하지 않고 닫기 (ESC)
+  // 이니셜 저장하지 않고 닫기 (ESC) — 보스 킬은 기존 이니셜에 그대로 귀속
   function skipEntry() {
-    state.lastRecords = loadRecords().slice(0, 5);
-    if (cloudTop && cloudTop.length) state.lastRecords = cloudTop;
+    state.runKills = 0;
+    state.lastRecords = loadRecords();
+    if (cloudAll && cloudAll.length) state.lastRecords = cloudAll;
+    state.rankScroll = 0;
     state.mode = 'over';
   }
 
@@ -2302,6 +2370,13 @@
     else onAction();
   });
   canvas.addEventListener('contextmenu', (e) => e.preventDefault()); // 우클릭 메뉴 차단
+  // 게임오버 랭킹 — 마우스 휠 스크롤
+  canvas.addEventListener('wheel', (e) => {
+    if (state.mode === 'over') {
+      e.preventDefault();
+      state.rankScroll += e.deltaY * 0.6;
+    }
+  }, { passive: false });
   document.addEventListener('mouseup', () => { state.firing = false; });
   canvas.addEventListener('touchstart', (e) => {
     lastInputTick = state.tick;
