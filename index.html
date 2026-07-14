@@ -1615,16 +1615,24 @@
     const bodyColor = boss.hurt > 0 ? '#ffffff' : boss.tierColor;
     const bx0 = boss.x, by0 = boss.y, bw0 = boss.w, bh0 = boss.h;
 
-    // 반사 모드 — 자기색 오라 링 (경고)
+    // 반사 모드 — 강화된 이중 오라 링 (경고)
     if (boss.reflect) {
       const pulse = 0.6 + 0.4 * Math.sin(state.tick * 0.2);
       ctx.strokeStyle = boss.tierColor;
-      ctx.globalAlpha = 0.5 + pulse * 0.4;
-      ctx.lineWidth = 3;
       ctx.shadowColor = boss.tierColor;
-      ctx.shadowBlur = 20;
+      // 안쪽 링
+      ctx.globalAlpha = 0.5 + pulse * 0.5;
+      ctx.lineWidth = 4;
+      ctx.shadowBlur = 32;
       ctx.beginPath();
       ctx.roundRect(bx0 - 8, by0 - 8, bw0 + 16, bh0 + 16, 18);
+      ctx.stroke();
+      // 바깥 링 — 숨쉬듯 커졌다 작아짐
+      const sp = 14 + pulse * 8;
+      ctx.globalAlpha = 0.25 + pulse * 0.3;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(bx0 - sp, by0 - sp, bw0 + sp * 2, bh0 + sp * 2, 24);
       ctx.stroke();
       ctx.shadowBlur = 0;
       ctx.globalAlpha = 1;
@@ -1636,12 +1644,21 @@
     ctx.strokeStyle = bodyColor;
     ctx.lineWidth = 3;
     ctx.shadowColor = hpRatio < 0.3 ? '#ff5555' : bodyColor;
-    ctx.shadowBlur = 22;
+    ctx.shadowBlur = boss.reflect ? 45 : 22; // 반사 중엔 후광 2배
     ctx.beginPath();
     ctx.roundRect(bx0, by0, bw0, bh0, rad);
     ctx.fill();
     ctx.stroke();
     ctx.shadowBlur = 0;
+    // 반사 모드 — 몸통 내부를 자기색으로 채움 (고동치는 펄스)
+    if (boss.reflect) {
+      ctx.fillStyle = boss.tierColor;
+      ctx.globalAlpha = 0.45 + 0.3 * Math.sin(state.tick * 0.2);
+      ctx.beginPath();
+      ctx.roundRect(bx0, by0, bw0, bh0, rad);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
 
     // 뿔 — idx개, 위 가장자리 균등 배치
     if (idx > 0) {
