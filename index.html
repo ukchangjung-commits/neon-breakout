@@ -645,6 +645,14 @@
   let entryVel = [0, 0, 0];     // 관성 속도
   let entryDrag = null;         // { slot, lastY }
   let entryActive = 0;          // 키보드 입력 대상 칸
+  let entryDeadline = 0;        // 입력 시간 만료 틱 — 만료 시 자동 저장 후 데모로
+  function enterEntryMode() {
+    state.mode = 'entry';
+    entryDeadline = state.tick + 600; // 최초 10초
+  }
+  function touchEntryTimer() {
+    entryDeadline = state.tick + 1200; // 동작이 있으면 20초로 리셋
+  }
   function entrySlotRect(i) {
     const startX = W / 2 - (ENTRY_SLOT.w * 3 + ENTRY_SLOT.gap * 2) / 2;
     return { x: startX + i * (ENTRY_SLOT.w + ENTRY_SLOT.gap), y: ENTRY_SLOT.y, w: ENTRY_SLOT.w, h: ENTRY_SLOT.h };
@@ -1310,7 +1318,7 @@
           ROW_COLORS[Math.floor(Math.random() * ROW_COLORS.length)], 16, 1.6);
         state.shake = Math.max(state.shake, 6);
       }
-      if (state.dyingT <= 0) state.mode = 'entry';
+      if (state.dyingT <= 0) enterEntryMode();
       return;
     }
     const p = state.paddle;
@@ -2145,10 +2153,30 @@
         ctx.stroke();
       }
 
+      // 입력 시간 카운트다운 — 이니셜(릴) 오른쪽 옆
+      const remainSec = Math.max(0, Math.ceil((entryDeadline - state.tick) / 60));
+      const r2 = entrySlotRect(2);
+      const urgent = remainSec <= 3;
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#5f7396';
+      ctx.font = '13px Consolas, monospace';
+      ctx.fillText('입력 시간', r2.x + r2.w + 24, r2.y + 28);
+      if (urgent && state.tick % 30 < 15) ctx.globalAlpha = 0.45; // 3초 이하 — 깜빡임
+      ctx.fillStyle = urgent ? '#ff5555' : '#22e6ff';
+      ctx.shadowColor = ctx.fillStyle;
+      ctx.shadowBlur = urgent ? 14 : 8;
+      ctx.font = 'bold 36px Consolas, monospace';
+      ctx.fillText(remainSec + '초', r2.x + r2.w + 24, r2.y + 66);
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#5f7396';
+      ctx.font = '11px Consolas, monospace';
+      ctx.fillText('만료 시 자동 저장 → 데모', r2.x + r2.w + 24, r2.y + 90);
+
       ctx.textAlign = 'center';
       ctx.fillStyle = '#5f7396';
       ctx.font = '14px Consolas, monospace';
-      ctx.fillText('위아래 드래그·휠로 돌리기 (속도 감응) · 키보드 0~9 A~Z 직접 입력', W / 2, 512);
+      ctx.fillText('위아래 드래그·휠로 돌리기 (속도 감응) · 키보드 0~9 A~Z 직접 입력 · 동작 시 20초로 연장', W / 2, 512);
 
       // 클릭 가능한 버튼 3개 — 저장 / 닫기 / 새 게임
       drawUiButton(ENTRY_SAVE_BTN, '✔ 저장 (Enter)', '#22e6ff');
@@ -2470,6 +2498,10 @@
     if (!state.attract && state.mode !== 'pause' && state.tick - lastInputTick > IDLE_LIMIT) {
       enterAttract();
     }
+    // 이니셜 입력 시간 만료 → 자동 저장 후 시뮬레이션으로
+    if (state.mode === 'entry' && state.tick > entryDeadline) {
+      enterAttract(); // 내부에서 confirmEntry()로 현재 릴 이니셜 저장
+    }
     step();
     draw();
     updateZodiac();
@@ -2526,7 +2558,7 @@
 
   function onAction() {
     ensureAudio();
-    if (state.mode === 'dying') { state.dyingT = 0; state.mode = 'entry'; return; } // 연출 건너뛰기
+    if (state.mode === 'dying') { state.dyingT = 0; enterEntryMode(); return; } // 연출 건너뛰기
     if (state.mode === 'entry') return; // 이니셜 화면은 클릭으로 닫히지 않음 (Enter 저장 / ESC 닫기)
     if (state.mode === 'ready') launch();
     else if (state.mode === 'play') state.mode = 'pause';
@@ -2557,6 +2589,7 @@
     }
     // 이니셜 입력 모드
     if (state.mode === 'entry') {
+      touchEntryTimer(); // 동작 → 20초로 리셋
       if (e.key === 'Enter') { confirmEntry(); }
       else if (e.key === 'Escape') { skipEntry(); } // 닫기 — 저장 안 함
       else if (e.key === 'Backspace' || e.key === 'ArrowLeft') { entryActive = Math.max(0, entryActive - 1); }
@@ -2623,6 +2656,7 @@
       const pt = canvasPoint(e);
       // 릴 드래그 중 — 이동량만큼 회전 + 속도 기록 (관성용)
       if (entryDrag) {
+        touchEntryTimer(); // 드래그도 동작 — 20초로 리셋
         const dy = pt.y - entryDrag.lastY;
         entryDrag.lastY = pt.y;
         entryPos[entryDrag.slot] += dy / 42;   // 42px = 한 글자
@@ -2654,6 +2688,7 @@
   window.addEventListener('touchmove', (e) => {
     if (entryDrag && state.mode === 'entry') { // 릴 터치 드래그
       e.preventDefault();
+      touchEntryTimer();
       const pt = canvasPoint(e);
       const dy = pt.y - entryDrag.lastY;
       entryDrag.lastY = pt.y;
@@ -2680,6 +2715,7 @@
       requestLock(); startRealGame(); return;
     }
     if (state.mode === 'entry') { // 이니셜 화면 — 릴 드래그 + 버튼 3개
+      touchEntryTimer(); // 동작 → 20초로 리셋
       const pt = canvasPoint(e);
       const si = slotAtPoint(pt.x, pt.y);
       if (si >= 0) { // 릴 드래그 시작
@@ -2708,6 +2744,7 @@
       state.rankScroll += e.deltaY * 0.6;
     } else if (state.mode === 'entry') {
       e.preventDefault();
+      touchEntryTimer(); // 동작 → 20초로 리셋
       // 커서 아래 릴(없으면 활성 릴)을 휠로 회전 — 속도 감응 관성
       const pt = canvasPoint(e);
       const si = slotAtPoint(pt.x, pt.y);
@@ -2732,6 +2769,7 @@
       startRealGame(); return;
     }
     if (state.mode === 'entry') { // 터치 — 릴 드래그 + 버튼 3개
+      touchEntryTimer(); // 동작 → 20초로 리셋
       const pt = canvasPoint(e);
       const si = slotAtPoint(pt.x, pt.y);
       if (si >= 0) {
