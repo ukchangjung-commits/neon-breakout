@@ -1145,13 +1145,41 @@
         if (phase === 'novice') { state.score = 0; recentGain = 0; } // 새 사이클 — 점수 리셋
         if (phase === 'jackpot') { confettiBlast(); triggerJackpot(); }
       }
+      // 1순위: 내려오는 공 추적 (생존)
       let target = W / 2, bestY = -1;
       for (const b of state.balls) {
         if (b.vy > 0 && b.y > bestY) { bestY = b.y; target = b.x; }
       }
       if (bestY < 0 && state.balls[0]) target = state.balls[0].x;
+      const ballUrgent = bestY > H * 0.55; // 공이 하단 접근 중 — 다른 것보다 우선
+      const pCx = p.x + p.w / 2;
+
+      if (phase !== 'novice') {
+        // 2순위: 공이 급하지 않으면 아이템 캡슐 주우러 이동 (보고 배우기!)
+        if (!ballUrgent) {
+          let item = null;
+          for (const d of state.drops) {
+            if (!d.hazard && (!item || d.y > item.y)) item = d;
+          }
+          if (item) target = item.x;
+        }
+        // 3순위: 폭탄이 패들 쪽으로 떨어지면 — 격추하거나 회피
+        let threat = null;
+        for (const d of state.drops) {
+          if (d.hazard && d.y > H - 280 && Math.abs(d.x - pCx) < 170) threat = d;
+        }
+        if (threat) {
+          if (phase === 'jackpot' || Math.random() < 0.6) {
+            target = threat.x; // 정렬해서 레이저로 격추
+            if (Math.abs(threat.x - pCx) < 26 && state.energy > shotCost()) tryShoot();
+          } else if (!ballUrgent) {
+            target = threat.x < W / 2 ? threat.x + 240 : threat.x - 240; // 옆으로 피신
+          }
+        }
+      }
+
       if (phase === 'novice') {
-        target += Math.sin(state.tick * 0.05) * 100; // 초보 — 손이 비틀비틀
+        target += Math.sin(state.tick * 0.05) * 100; // 초보 — 손이 비틀비틀 (폭탄도 실수로 맞음)
         p.x += (target - p.w / 2 - p.x) * 0.045;     // 반응도 느림
       } else {
         p.x += (target - p.w / 2 - p.x) * 0.25;      // 프로 — 즉각 반응
