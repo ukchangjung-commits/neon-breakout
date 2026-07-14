@@ -463,17 +463,16 @@
 
   const ROW_COLORS = ['#ff3df0', '#c95cff', '#7f7bff', '#3fa9ff', '#22e6ff', '#2effc8'];
 
-  // fainders.ai CI — 배경 별 파티클 (위→아래 낙하, 별처럼 반짝임, SVG 내장)
+  // fainders.ai CI — 고정 별자리 (화면 위쪽 55%에만, 크기 다양·촘촘, 간혹 반짝)
+  const CI_ZONE = 0.55; // 로고가 깔리는 세로 범위 (아래 45%는 비움)
   const ciStars = [];
-  for (let i = 0; i < 22; i++) {
+  for (let i = 0; i < 40; i++) {
     ciStars.push({
       x: Math.random() * W,
-      y: Math.random() * H,
-      w: 55 + Math.random() * 55,       // 로고 폭 55~110px (작게)
-      vy: 0.12 + Math.random() * 0.28,  // 낙하 속도
-      tw: 0.012 + Math.random() * 0.03, // 숨쉬기 주기
-      ph: Math.random() * Math.PI * 2,  // 위상
-      seed: Math.floor(Math.random() * 720), // 플레어 타이밍 분산
+      y: Math.random() * H * CI_ZONE,
+      w: 30 + Math.random() * 60,             // 로고 폭 30~90px
+      seed: Math.floor(Math.random() * 900),  // 플레어 시작 시점 분산
+      per: 480 + Math.floor(Math.random() * 720), // 플레어 주기 8~20초
     });
   }
   const CI_IMG = new Image();
@@ -1818,17 +1817,14 @@
     ctx.fillStyle = '#050810';
     ctx.fillRect(-10, -10, W + 20, H + 20);
 
-    // fainders.ai CI 별 — 검은 밤하늘에 로고가 별처럼 떨어지며 반짝임
+    // fainders.ai CI 별자리 — 고정 배치, 위쪽일수록 밝고 간혹 하나씩 반짝
     if (CI_IMG.complete && CI_IMG.naturalWidth) {
       for (const s of ciStars) {
-        s.y += s.vy; // 천천히 낙하
-        if (s.y > H + 24) { s.y = -24; s.x = Math.random() * W; }
-        const grad = 1 - (s.y / H) * 0.75;                            // 위 100% → 아래 25%
-        const twinkle = 0.55 + 0.45 * Math.sin(state.tick * s.tw + s.ph); // 은은한 숨쉬기
-        let a = 0.06 * grad * twinkle;
-        const fl = (state.tick + s.seed) % 720;                       // ~12초마다 별마다 다른 타이밍
-        if (fl < 40) a += 0.11 * grad * Math.sin((fl / 40) * Math.PI); // 반짝! 플레어
-        ctx.globalAlpha = Math.min(0.18, a);
+        const grad = 1 - (s.y / (H * CI_ZONE)) * 0.8; // 최상단 100% → 경계 20% (부드럽게 소멸)
+        let a = 0.055 * grad;                          // 평소 — 은은한 고정 밝기
+        const fl = (state.tick + s.seed) % s.per;      // 별마다 다른 주기·타이밍
+        if (fl < 50) a += 0.12 * grad * Math.sin((fl / 50) * Math.PI); // 밝아졌다 → 원상태로
+        ctx.globalAlpha = Math.min(0.2, a);
         ctx.drawImage(CI_IMG, s.x - s.w / 2, s.y, s.w, s.w * (20 / 109));
       }
       ctx.globalAlpha = 1;
