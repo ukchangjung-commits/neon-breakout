@@ -308,7 +308,7 @@
   <div class="screen"><canvas id="game" width="720" height="900"></canvas></div>
   <div id="helpPanel" class="help-panel">
     마우스 또는 <kbd>←</kbd> <kbd>→</kbd> 이동 · <kbd>Space</kbd> 공 발사 / <b>일시정지</b> ·
-    <kbd>X</kbd> 또는 <b>클릭(꾹)</b> 레이저!<br>
+    <kbd>X</kbd> 또는 <b>클릭(꾹)</b> 레이저 · <kbd>N</kbd> <b>새 게임</b><br>
     <span style="color:#22e6ff">R</span>·<span style="color:#ff3df0">B</span> 아이템을 먹으면 버프 + 우상단에 <b>세트 적립(각 최대 5)</b> —
     발동: <b>탄창(연사 25발)</b> = <kbd>Q</kbd> 또는 <b>휠클릭</b> · <b>폭탄(5발)</b> = <kbd>W</kbd> 또는 <b>우클릭</b> (에너지 소모 없음)<br>
     화면을 클릭하면 <b>마우스가 게임에 고정</b>됩니다 (커서가 밖으로 안 나감) · <kbd>ESC</kbd>로 해제<br>
@@ -2155,7 +2155,7 @@
     lastInputTick = state.tick;
     // 데모 중 — Space/Enter로 게임 시작
     if (state.attract) {
-      if (e.code === 'Space' || e.code === 'Enter') {
+      if (e.code === 'Space' || e.code === 'Enter' || e.code === 'KeyN') {
         e.preventDefault();
         ensureAudio();
         startRealGame();
@@ -2176,6 +2176,7 @@
     if (e.code === 'ArrowLeft') state.keys.left = true;
     if (e.code === 'ArrowRight') state.keys.right = true;
     if (e.code === 'Space') { e.preventDefault(); onAction(); } // 발사 / 일시정지 / 계속
+    if (e.code === 'KeyN') { ensureAudio(); startRealGame(); return; } // 새 게임 — 언제든 처음부터
     if (e.code === 'KeyQ') { ensureAudio(); useAmmoSet('rapid'); } // 탄창 세트
     if (e.code === 'KeyW') { ensureAudio(); useAmmoSet('bomb'); }  // 폭탄 세트
     if (e.code === 'KeyX') { ensureAudio(); state.firing = true; tryShoot(); }
