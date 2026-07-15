@@ -1666,14 +1666,22 @@
         const fireRate = phase === 'novice' ? 0.05 : phase === 'pro' ? 0.22 : 0.4;
         if (state.energy > 30 && Math.random() < fireRate) tryShoot();
 
-        if (phase === 'pro') {
-          // 프로 — 먹어서 얻은 세트(연사·폭탄)만 발동 (아이템 없이 변하지 않음)
+        // 단계별 시연 아이템 — AI가 먹어서 효과를 보여줌(강제 변경 없음)
+        const rx = () => 60 + Math.random() * (W - 120);
+        if (phase === 'novice') {
+          // 초보 — 패들 크기 변화(W 성장, 폭탄 축소는 자연 낙하) · 멀티볼 · 4줄 레이저, 차분히
+          if (state.tick % 180 === 0) spawnItem(rx(), 90, 'wide');
+          if (state.tick % 300 === 0) spawnItem(rx(), 90, 'multi');
+          if (state.tick % 220 === 0) spawnItem(rx(), 90, 'quad');
+        } else if (phase === 'pro') {
+          // 프로 — 폭탄 레이저 + 간혹 고속 연사, 먹은 세트도 발동
+          if (state.tick % 110 === 0) spawnItem(rx(), 90, 'bomb');
+          if (state.tick % 260 === 0) spawnItem(rx(), 90, 'rapid');
           if (state.tick % 150 === 0 && state.ammo.rapid > 0) useAmmoSet('rapid');
-          if (state.tick % 210 === 0 && state.ammo.bomb > 0) useAmmoSet('bomb');
-        }
-        if (phase === 'jackpot') {
-          // 잭팟 — 좋은 아이템을 뿌려 '먹어서' 화려하게(강제 버프·멀티볼 없음) + 폭죽·색종이 축제
-          if (state.tick % 40 === 0) spawnItem(60 + Math.random() * (W - 120), 90, Math.random() < 0.5 ? 'quad' : 'rapid');
+          if (state.tick % 200 === 0 && state.ammo.bomb > 0) useAmmoSet('bomb');
+        } else {
+          // 잭팟 — 최대 화력: 폭탄·고속연사·4줄 전부 화끈하게 + 폭죽·색종이 축제
+          if (state.tick % 38 === 0) spawnItem(rx(), 90, ['bomb', 'rapid', 'quad'][Math.floor(state.tick / 38) % 3]);
           if (state.tick % 48 === 0) {
             for (let i = 0; i < 2; i++) {
               state.fireworks.push({
