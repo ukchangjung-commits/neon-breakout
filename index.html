@@ -500,7 +500,7 @@
   }
 
   // ---- 시작 화면 버튼: START / 기록 보기 + 전체 기록 오버레이 ----
-  let recordsOpen = false, recordsList = [], simMenu = false, selRecordIdx = -1;
+  let recordsOpen = false, recordsList = [], simMenu = false, selRecordIdx = -1, recDrag = null;
   function startBtnRect() { const w = Math.min(210, W * 0.34); return { x: W / 2 - w - 8, y: H / 2 + 36, w: w, h: 46 }; }
   function recordsBtnRect() { const w = Math.min(210, W * 0.34); return { x: W / 2 + 8, y: H / 2 + 36, w: w, h: 46 }; }
   function recordsCloseRect() { const w = Math.min(320, W - 40); return { x: W / 2 - w / 2, y: H - 58, w: w, h: 44 }; }
@@ -2850,7 +2850,7 @@
         ctx.shadowBlur = 0;
         ctx.fillStyle = '#5f7396';
         ctx.font = '14px Menlo, Consolas, monospace';
-        ctx.fillText('참가자 ' + recordsList.length + '명 · 이니셜 클릭 → 시작 · 휠 스크롤 · 빈곳/ESC 닫기', W / 2, 148);
+        ctx.fillText('참가자 ' + recordsList.length + '명 · 드래그/휠로 스크롤 · 이니셜 탭하면 선택 · 빈곳/ESC 닫기', W / 2, 148);
 
         const rowH = 34, listTop = 172, listH = H - listTop - 92;
         const maxScroll = Math.max(0, recordsList.length * rowH - listH + 10);
@@ -3145,6 +3145,13 @@
   // 잠금 중엔 이동량(movementX)으로, 아니면 창 전체 좌표로 패들 추적
   window.addEventListener('mousemove', (e) => {
     lastInputTick = state.tick;
+    if (recDrag) { // 기록 리스트 드래그 스크롤
+      const pt = canvasPoint(e);
+      state.rankScroll -= (pt.y - recDrag.y);
+      recDrag.y = pt.y;
+      if (Math.abs(pt.y - recDrag.startY) > 6) recDrag.moved = true;
+      return;
+    }
     // 이니셜 화면 — '새 게임' 버튼 위에서 손가락 커서
     if (state.mode === 'entry' && !pointerLocked) {
       const pt = canvasPoint(e);
@@ -3184,6 +3191,14 @@
     state.paddle.x = Math.max(8, Math.min(W - state.paddle.w - 8, state.paddle.x));
   });
   window.addEventListener('touchmove', (e) => {
+    if (recDrag) { // 기록 리스트 터치 드래그 스크롤
+      e.preventDefault();
+      const pt = canvasPoint(e);
+      state.rankScroll -= (pt.y - recDrag.y);
+      recDrag.y = pt.y;
+      if (Math.abs(pt.y - recDrag.startY) > 6) recDrag.moved = true;
+      return;
+    }
     if (entryDrag && state.mode === 'entry') { // 릴 터치 드래그
       e.preventDefault();
       touchEntryTimer();
@@ -3209,10 +3224,11 @@
           if (selRecordIdx >= 0 && recordsList[selRecordIdx]) startAsInitial(recordsList[selRecordIdx].name || '???');
           return;
         }
-        const _lt = 172, _rh = 34, _lh = H - 172 - 92; // 행 선택 (draw와 동일 수치)
+        const _lt = 172, _rh = 34, _lh = H - 172 - 92; // 리스트: 드래그=스크롤, 탭=선택
         if (apt.x >= W / 2 - 245 && apt.x <= W / 2 + 245 && apt.y >= _lt && apt.y <= _lt + _lh) {
           const _idx = Math.floor((apt.y + state.rankScroll - (_lt + 10)) / _rh);
-          if (_idx >= 0 && _idx < recordsList.length) { selRecordIdx = _idx; return; }
+          recDrag = { y: apt.y, startY: apt.y, idx: (_idx >= 0 && _idx < recordsList.length) ? _idx : -1, moved: false };
+          return;
         }
         recordsOpen = false; return; // 빈 곳 클릭 = 닫기
       }
@@ -3266,7 +3282,7 @@
       entryVel[slot] += e.deltaY * 0.0035;
     }
   }, { passive: false });
-  document.addEventListener('mouseup', () => { state.firing = false; entryDrag = null; });
+  document.addEventListener('mouseup', () => { state.firing = false; entryDrag = null; if (recDrag) { if (!recDrag.moved && recDrag.idx >= 0) selRecordIdx = recDrag.idx; recDrag = null; } });
   canvas.addEventListener('touchstart', (e) => {
     lastInputTick = state.tick;
     e.preventDefault();
@@ -3281,7 +3297,8 @@
         const _lt = 172, _rh = 34, _lh = H - 172 - 92;
         if (apt.x >= W / 2 - 245 && apt.x <= W / 2 + 245 && apt.y >= _lt && apt.y <= _lt + _lh) {
           const _idx = Math.floor((apt.y + state.rankScroll - (_lt + 10)) / _rh);
-          if (_idx >= 0 && _idx < recordsList.length) { selRecordIdx = _idx; return; }
+          recDrag = { y: apt.y, startY: apt.y, idx: (_idx >= 0 && _idx < recordsList.length) ? _idx : -1, moved: false };
+          return;
         }
         recordsOpen = false; return;
       }
@@ -3313,7 +3330,7 @@
     if (state.mode === 'play') { state.firing = true; tryShoot(); }
     else onAction();
   }, { passive: false });
-  document.addEventListener('touchend', () => { state.firing = false; entryDrag = null; });
+  document.addEventListener('touchend', () => { state.firing = false; entryDrag = null; if (recDrag) { if (!recDrag.moved && recDrag.idx >= 0) selRecordIdx = recDrag.idx; recDrag = null; } });
 
   // 도움말 토글
   const helpBtn = document.getElementById('helpBtn');
