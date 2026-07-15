@@ -198,7 +198,8 @@
   .ammo-row { display: flex; gap: 4px; align-items: center; height: 15px; }
   .ammo-row .cell { opacity: 0.2; transition: opacity 0.15s; flex: none; }
   .ammo-row .cell.on { opacity: 1; }
-  .ammo-row .rapid { width: 7px; height: 14px; border-radius: 2px; background: #22e6ff; box-shadow: 0 0 5px rgba(34, 230, 255, 0.7); }
+  /* 탄창 — 가로선(이쑤시개)을 위로 쌓은 모양, 너비는 폭탄과 동일(13px) */
+  .ammo-row .rapid { width: 13px; height: 14px; border-radius: 2px; background: repeating-linear-gradient(to bottom, #22e6ff 0, #22e6ff 2px, transparent 2px, transparent 4px); box-shadow: 0 0 5px rgba(34, 230, 255, 0.7); }
   .ammo-row .bomb { width: 13px; height: 13px; border-radius: 50%; background: #ff3df0; box-shadow: 0 0 5px rgba(255, 61, 240, 0.7); }
   .energy-bar {
     width: 100%;
