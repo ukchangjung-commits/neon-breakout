@@ -3087,10 +3087,10 @@
     for (const d of state.drops) { d._rx = d.x; d._ry = d.y; d.x = il(d.px, d.x, a); d.y = il(d.py, d.y, a); }
     const bo = state.boss; if (bo) { bo._rx = bo.x; bo.x = il(bo.px, bo.x, a); }
   }
-  function interpExit() { // 실제(물리) 위치 복원
-    for (const b of state.balls) { b.x = b._rx; b.y = b._ry; }
-    for (const d of state.drops) { d.x = d._rx; d.y = d._ry; }
-    const bo = state.boss; if (bo) bo.x = bo._rx;
+  function interpExit() { // 실제(물리) 위치 복원 — interpEnter를 거치지 않은(그리기 도중 생성된 CI 하트 등) 객체는 건너뜀
+    for (const b of state.balls) { if (b._rx != null) { b.x = b._rx; b.y = b._ry; } }
+    for (const d of state.drops) { if (d._rx != null) { d.x = d._rx; d.y = d._ry; } }
+    const bo = state.boss; if (bo && bo._rx != null) bo.x = bo._rx;
   }
   function stepFixed() {
     state.tick++;
