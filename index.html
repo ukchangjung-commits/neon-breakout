@@ -1011,6 +1011,8 @@
   }
 
   function spawnParticles(x, y, color, n = 12, power = 1) {
+    if (state.particles.length > 240) return;   // 파티클 상한 — 저사양 FPS 급락 방지
+    n = Math.max(1, Math.round(n * 0.7));        // 개수 30% 감축 (렌더 부하 완화)
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2;
       const s = (1 + Math.random() * 3.5) * power;
@@ -1639,13 +1641,13 @@
           // 잭팟 — 신나게 펑펑: 4줄+고속 폭풍 + 멀티볼 + 점수 샤워 + 폭죽·색종이 (게임하고 싶게)
           state.buffs.quad = Math.max(state.buffs.quad, 40);
           state.buffs.rapid = Math.max(state.buffs.rapid, 40);
-          if (state.balls.length < 3 && state.tick % 80 === 0) splitBalls();
+          if (state.balls.length < 3 && state.tick % 110 === 0) splitBalls();
           if (state.tick % 4 === 0) {
             state.score += 40 + Math.floor(Math.random() * 160);
             recentGain += 100; // 자리수 펑펑
           }
-          if (state.tick % 30 === 0) {
-            for (let i = 0; i < 3; i++) {
+          if (state.tick % 48 === 0) {
+            for (let i = 0; i < 2; i++) {
               state.fireworks.push({
                 delay: i * 6,
                 x: 60 + Math.random() * (W - 120),
@@ -1654,7 +1656,7 @@
               });
             }
           }
-          if (state.tick % 75 === 0) confettiBlast();
+          if (state.tick % 110 === 0) confettiBlast();
         }
       }
     }
@@ -3014,9 +3016,25 @@
     zodiacRow.classList.toggle('jackpot', jack);
   }
 
-  // 고정 타임스텝 — 물리는 60Hz로만 진행(모니터 주사율·OS·브라우저 무관 동일 속도), 렌더는 프레임마다
+  // 고정 타임스텝(물리 60Hz, 주사율·OS·브라우저 무관 동일 속도) + 렌더 보간(저FPS에서도 부드럽게 → 눈 피로 완화)
   const STEP_MS = 1000 / 60;
   let _lastT = 0, _acc = 0;
+  const il = (prev, cur, a) => (prev == null ? cur : prev + (cur - prev) * a); // 선형 보간
+  function snapshotPrev() { // 스텝 직전 위치 저장 (보간 기준점)
+    for (const b of state.balls) { b.px = b.x; b.py = b.y; }
+    for (const d of state.drops) { d.px = d.x; d.py = d.y; }
+    if (state.boss) state.boss.px = state.boss.x;
+  }
+  function interpEnter(a) { // 그리기용 보간 위치 적용 (패들은 마우스 조작이라 제외 — 입력 지연 방지)
+    for (const b of state.balls) { b._rx = b.x; b._ry = b.y; b.x = il(b.px, b.x, a); b.y = il(b.py, b.y, a); }
+    for (const d of state.drops) { d._rx = d.x; d._ry = d.y; d.x = il(d.px, d.x, a); d.y = il(d.py, d.y, a); }
+    const bo = state.boss; if (bo) { bo._rx = bo.x; bo.x = il(bo.px, bo.x, a); }
+  }
+  function interpExit() { // 실제(물리) 위치 복원
+    for (const b of state.balls) { b.x = b._rx; b.y = b._ry; }
+    for (const d of state.drops) { d.x = d._rx; d.y = d._ry; }
+    const bo = state.boss; if (bo) bo.x = bo._rx;
+  }
   function stepFixed() {
     state.tick++;
     // 무입력 20초 → 시뮬레이션 모드 (일시정지 중엔 예외)
@@ -3027,6 +3045,7 @@
     if (state.mode === 'entry' && state.tick > entryDeadline) {
       enterAttract(); // 내부에서 confirmEntry()로 현재 릴 이니셜 저장
     }
+    snapshotPrev();
     step();
   }
   function loop(now) {
@@ -3038,7 +3057,9 @@
     let n = 0;
     while (_acc >= STEP_MS && n < 5) { stepFixed(); _acc -= STEP_MS; n++; }
     if (n >= 5) _acc = 0;             // 밀린 스텝은 폐기 (느린 기기 안전장치)
-    draw();
+    const alpha = Math.min(1, _acc / STEP_MS);
+    interpEnter(alpha);
+    try { draw(); } finally { interpExit(); } // 예외가 나도 물리 좌표는 반드시 복원
     updateZodiac();
     updateScoreDisplay();
     updateAmmoPanel();
