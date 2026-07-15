@@ -539,19 +539,17 @@
   function demoBeginTransition() { if (demoFadeDir === 0) { demoFadeDir = 1; demoFadeAction = 'level'; } }
   function demoBeginRestart() { demoFadeDir = 1; demoFadeAction = 'restart'; } // 20초 데모 종료 — 진행 중 페이드도 덮어씀
   function updateDemoFade() {
-    if (demoFadeDir === 1) {                       // 아웃 — 어두워짐 (재시작은 빠르게)
-      demoFade = Math.min(1, demoFade + (demoFadeAction === 'restart' ? 0.16 : 0.09));
-      if (demoFade >= 1) {                         // 암전 순간
-        if (demoFadeAction === 'restart') {        // 새 데모 — 전부 초기화 (레벨1·점수·목숨·버프·페이즈)
-          demoNL = 0; state.level = DEMO_LEVELS[0];
+    if (demoFadeDir === 1) {                       // 아웃 — 어두워짐 (~0.5초)
+      demoFade = Math.min(1, demoFade + 0.033);
+      if (demoFade >= 1) {                         // 암전 순간 — 항상 다음 레벨로 (다양한 판 + 보스 등장)
+        demoNL = (demoNL + 1) % DEMO_LEVELS.length;
+        state.level = DEMO_LEVELS[demoNL];
+        if (demoFadeAction === 'restart') {        // 20초 새 데모 — 점수·목숨·버프·페이즈 초기화(레벨은 다음 것)
           state.score = 0; recentGain = 0; state.lives = 5; state.deaths = 0;
           state.bombHits = 0; state.grow = 0; state.shield = 0;
           state.ammo = { rapid: 0, bomb: 0 };
           clearBuffs();
           attractPhaseStart = state.tick; attractPhase = 'novice';
-        } else {                                   // 다음 레벨
-          demoNL = (demoNL + 1) % DEMO_LEVELS.length;
-          state.level = DEMO_LEVELS[demoNL];
         }
         buildLevel(); resetBall(true); state.attractWait = 40;
         demoFadeDir = -1;                          // 페이드 인 시작
