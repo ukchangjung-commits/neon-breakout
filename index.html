@@ -500,15 +500,26 @@
   }
 
   // ---- 시작 화면 버튼: START / 기록 보기 + 전체 기록 오버레이 ----
-  let recordsOpen = false, recordsList = [], simMenu = false;
+  let recordsOpen = false, recordsList = [], simMenu = false, selRecordIdx = -1;
   function startBtnRect() { const w = Math.min(210, W * 0.34); return { x: W / 2 - w - 8, y: H / 2 + 36, w: w, h: 46 }; }
   function recordsBtnRect() { const w = Math.min(210, W * 0.34); return { x: W / 2 + 8, y: H / 2 + 36, w: w, h: 46 }; }
   function recordsCloseRect() { return { x: W / 2 - 90, y: H - 58, w: 180, h: 44 }; }
   function openRecords() {
     recordsList = (cloudAll && cloudAll.length) ? cloudAll : loadRecords();
     state.rankScroll = 0;
+    selRecordIdx = -1;
     recordsOpen = true;
     if (fdb) refreshCloudTop(); // 최신 글로벌 랭킹 갱신 시도
+  }
+  // 기록에서 고른 이니셜로 이어서 시작 — 그 이니셜의 12지신/난이도 누적을 이어받음
+  function startAsInitial(name) {
+    currentPlayer = name || '???';
+    bossKills = bossMap[currentPlayer] || 0;
+    safeStore.set(PLAYER_KEY, currentPlayer);
+    applyBossTrophies();
+    recordsOpen = false;
+    requestLock();
+    startRealGame();
   }
   function diffStage() {
     if (manualStage !== null) return manualStage;
@@ -1168,6 +1179,15 @@
   function loadRecords() {
     return safeStore.getJSON(REC_KEY, []);
   }
+  // 이니셜별 최고점만 남기고 점수 내림차순 정렬
+  function dedupBest(list) {
+    const m = {};
+    for (const r of (list || [])) {
+      const k = r.name || '???';
+      if (!m[k] || (r.score || 0) > (m[k].score || 0)) m[k] = r;
+    }
+    return Object.values(m).sort((a, b) => (b.score || 0) - (a.score || 0));
+  }
   function saveRecord(name) {
     const rec = {
       name,
@@ -1177,9 +1197,11 @@
             ' ' + new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }),
     };
     const recs = loadRecords();
-    recs.push(rec);
-    recs.sort((a, b) => b.score - a.score);
-    safeStore.set(REC_KEY, JSON.stringify(recs.slice(0, 100))); // 로컬 기록도 100까지 보관·스크롤
+    const ex = recs.find(r => (r.name || '???') === name); // 이니셜별 최고점만 기록
+    if (ex) { if (rec.score > (ex.score || 0)) { ex.score = rec.score; ex.level = rec.level; ex.when = rec.when; } }
+    else recs.push(rec);
+    recs.sort((a, b) => (b.score || 0) - (a.score || 0));
+    safeStore.set(REC_KEY, JSON.stringify(recs.slice(0, 100)));
     localTopCache = recs.slice(0, 3); // 데모 화면 TOP 3 갱신
     cloudSave(rec); // 클라우드 랭킹에도 저장 (미설정 시 무시)
   }
@@ -1219,7 +1241,7 @@
     try {
       const snap = await fsm.getDocs(fsm.query(
         fsm.collection(fdb, 'scores'), fsm.orderBy('score', 'desc'), fsm.limit(100)));
-      cloudAll = snap.docs.map(d => d.data());
+      cloudAll = dedupBest(snap.docs.map(d => d.data())); // 이니셜별 최고점만
       cloudTop = cloudAll.slice(0, 5);
       if (state.mode === 'over' && cloudAll.length) state.lastRecords = cloudAll;
     } catch (e) {}
@@ -2828,7 +2850,7 @@
         ctx.shadowBlur = 0;
         ctx.fillStyle = '#5f7396';
         ctx.font = '14px Menlo, Consolas, monospace';
-        ctx.fillText('참가자 ' + recordsList.length + '명 · 마우스 휠로 스크롤', W / 2, 148);
+        ctx.fillText('참가자 ' + recordsList.length + '명 · 이니셜 클릭 → 시작 · 휠 스크롤 · 빈곳/ESC 닫기', W / 2, 148);
 
         const rowH = 34, listTop = 172, listH = H - listTop - 92;
         const maxScroll = Math.max(0, recordsList.length * rowH - listH + 10);
@@ -2841,6 +2863,10 @@
           const rec = recordsList[i];
           const y = listTop + 26 + i * rowH - state.rankScroll;
           if (y < listTop - 10 || y > listTop + listH + 20) continue;
+          if (i === selRecordIdx) { // 선택된 이니셜 강조
+            ctx.fillStyle = 'rgba(46, 255, 200, 0.16)';
+            ctx.fillRect(W / 2 - 245, y - 22, 490, rowH - 2);
+          }
           const medalCol = i === 0 ? '#ffd700' : i === 1 ? '#c0c0c0' : i === 2 ? '#cd7f32' : '#cfe6ff';
           ctx.font = (i < 3 ? 'bold ' : '') + '16px Menlo, Consolas, monospace';
           ctx.textAlign = 'left';
@@ -2872,7 +2898,10 @@
           ctx.fillStyle = '#22e6ff';
           ctx.fillRect(W / 2 + 250, thY, 6, thH);
         }
-        drawUiButton(recordsCloseRect(), '✕ 닫기', '#ff9a3d');
+        const _sel = selRecordIdx >= 0 && recordsList[selRecordIdx];
+        drawUiButton(recordsCloseRect(),
+          _sel ? '▶ ' + (recordsList[selRecordIdx].name || '???') + ' 로 시작하기' : '이니셜 선택 후 시작',
+          _sel ? '#2effc8' : '#5f7396');
       }
     }
 
@@ -3175,7 +3204,18 @@
     ensureAudio();
     if (state.attract) { // 데모 중 — 버튼/단계 박스 처리, 그 외 = 게임 시작
       const apt = canvasPoint(e);
-      if (recordsOpen) { recordsOpen = false; return; } // 기록 오버레이 클릭 = 닫기
+      if (recordsOpen) {
+        if (inBtn(recordsCloseRect(), apt.x, apt.y)) { // 하단 버튼 = 선택해서 시작
+          if (selRecordIdx >= 0 && recordsList[selRecordIdx]) startAsInitial(recordsList[selRecordIdx].name || '???');
+          return;
+        }
+        const _lt = 172, _rh = 34, _lh = H - 172 - 92; // 행 선택 (draw와 동일 수치)
+        if (apt.x >= W / 2 - 245 && apt.x <= W / 2 + 245 && apt.y >= _lt && apt.y <= _lt + _lh) {
+          const _idx = Math.floor((apt.y + state.rankScroll - (_lt + 10)) / _rh);
+          if (_idx >= 0 && _idx < recordsList.length) { selRecordIdx = _idx; return; }
+        }
+        recordsOpen = false; return; // 빈 곳 클릭 = 닫기
+      }
       if (inBtn(recordsBtnRect(), apt.x, apt.y)) { openRecords(); return; }
       if (inBtn(startBtnRect(), apt.x, apt.y)) { requestLock(); startRealGame(); return; }
       const si = stageAtPoint(apt.x, apt.y);
@@ -3233,7 +3273,18 @@
     ensureAudio();
     if (state.attract) {
       const apt = canvasPoint(e);
-      if (recordsOpen) { recordsOpen = false; return; }
+      if (recordsOpen) {
+        if (inBtn(recordsCloseRect(), apt.x, apt.y)) {
+          if (selRecordIdx >= 0 && recordsList[selRecordIdx]) startAsInitial(recordsList[selRecordIdx].name || '???');
+          return;
+        }
+        const _lt = 172, _rh = 34, _lh = H - 172 - 92;
+        if (apt.x >= W / 2 - 245 && apt.x <= W / 2 + 245 && apt.y >= _lt && apt.y <= _lt + _lh) {
+          const _idx = Math.floor((apt.y + state.rankScroll - (_lt + 10)) / _rh);
+          if (_idx >= 0 && _idx < recordsList.length) { selRecordIdx = _idx; return; }
+        }
+        recordsOpen = false; return;
+      }
       if (inBtn(recordsBtnRect(), apt.x, apt.y)) { openRecords(); return; }
       if (inBtn(startBtnRect(), apt.x, apt.y)) { startRealGame(); return; }
       const si = stageAtPoint(apt.x, apt.y);
