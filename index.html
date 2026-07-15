@@ -337,8 +337,9 @@
     <b>콤보 2 이상</b>으로 벽돌을 깨면 뭔가 떨어져요 — <b>1/3은 아이템</b>(받기), <b style="color:#ff5555">2/3은 폭탄</b>(피하기! 레이저로 격추 +15점)<br>
     폭탄 피격: <b>1회 = 패들 1/2</b> → <b>2회 = 1/4 + <span style="color:#ff5555">빨간 경고</span></b> → <b style="color:#ff5555">3회 = 목숨 -1</b> (목숨을 잃으면 패들 복구)<br>
     손상 상태에서 <span style="color:#2effc8">W</span>를 먹으면 확장 대신 <b>한 단계 수리</b> · 1/4 손상 + <span style="color:#ff9a3d">S</span> 축소가 겹치면 <b>총알이 1발</b>만 나감<br>
-    30000점마다 CI가 번쩍이며 하트 2개 낙하 — <span style="color:#ff5577">♥ 분홍 = 목숨 +1</span> ·
-    <span style="color:#3fa9ff">♥ 파랑 = 실드 15초</span> (폭탄 파괴 · 공 난반사 · 아이템/총알은 통과)<br>
+    CI가 번쩍이면 하트 낙하 — <span style="color:#ff5577">♥ 분홍 = 목숨 +1 (30000점마다)</span> ·
+    <span style="color:#3fa9ff">♥ 파랑 = 실드 15초 (1단계 10000점 → 10단계 100만점, 고난도일수록 희귀)</span>
+    — 실드: 폭탄 파괴 · 공 난반사 · 아이템/총알 통과<br>
     아이템: <span style="color:#ffc233">Q</span> 4줄레이저 ·
     <span style="color:#22e6ff">R</span> 고속연사 ·
     <span style="color:#ff3df0">B</span> 폭탄레이저 ·
@@ -435,6 +436,8 @@
     if (manualStage === null && bossKills === 0) return 0.25;
     return Math.min(0.65, 0.45 + 0.02 * diffStage());
   }
+  // 파란 하트(실드) 등장 간격 — 단계마다 ~1.67배씩, 10단계 = 100만 점 (사실상 희귀)
+  const BLUE_HEART_STEP = [10000, 20000, 30000, 50000, 80000, 130000, 220000, 360000, 600000, 1000000];
   // 이니셜 입력 시 — 이번 판 킬을 그 이니셜에게 귀속하고 진행 상태 이어받기
   function assignPlayerKills(name) {
     if (name !== currentPlayer) {
@@ -981,17 +984,21 @@
     // 200점 단위 돌파 → 축포!
     const crossed = Math.floor(state.score / 200) - Math.floor(before / 200);
     if (crossed > 0) celebrate(Math.floor(state.score / 200) * 200);
-    // 10000점마다 파란 하트(실드), 30000점마다 분홍 하트(목숨) — CI가 번쩍이며 낙하
-    const k10 = Math.floor(state.score / 10000) - Math.floor(before / 10000);
+    // 분홍 하트(목숨) 30000점 고정 · 파란 하트(실드)는 난이도 단계별로 희귀해짐
+    const blueStep = BLUE_HEART_STEP[diffStage()];
+    const k10 = Math.floor(state.score / blueStep) - Math.floor(before / blueStep);
     const k30 = Math.floor(state.score / 30000) - Math.floor(before / 30000);
     if (k10 > 0 || k30 > 0) {
       triggerCiHeartDrop(k30 > 0, k10 > 0);
       sfx.fanfare();
-      if (k30 > 0) {
+      if (k30 > 0 && k10 > 0) {
         confettiBlast();
-        showToast('💖 ' + Math.floor(state.score / 30000) * 30000 + '점! 하트 + 실드 낙하!', '#ff5577');
+        showToast('💖🛡 ' + Math.floor(state.score / 30000) * 30000 + '점! 하트 + 실드 낙하!', '#ff5577');
+      } else if (k30 > 0) {
+        confettiBlast();
+        showToast('💖 ' + Math.floor(state.score / 30000) * 30000 + '점! 하트 낙하!', '#ff5577');
       } else {
-        showToast('🛡 ' + Math.floor(state.score / 10000) * 10000 + '점! 파란 하트 낙하!', '#3fa9ff');
+        showToast('🛡 ' + Math.floor(state.score / blueStep) * blueStep + '점! 파란 하트 낙하!', '#3fa9ff');
       }
     }
     updateHud();
