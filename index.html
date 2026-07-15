@@ -1620,9 +1620,14 @@
         }
       }
 
-      // 이동 — 초보는 차분·부드럽게(비틀거림 없음, 룰 보여주기), 프로·잭팟은 즉각
-      if (phase === 'novice') p.x += (target - p.w / 2 - p.x) * 0.10;
-      else                    p.x += (target - p.w / 2 - p.x) * 0.28;
+      // 이동 — 초보는 아주 차분히(휙휙 금지: 낮은 추종 + 스텝당 이동 상한으로 부드럽게), 프로·잭팟은 즉각
+      if (phase === 'novice') {
+        const dx = (target - p.w / 2 - p.x) * 0.07;
+        const cap = W * 0.008;   // 스텝당 최대 이동 — 급격한 휙휙 방지
+        p.x += Math.max(-cap, Math.min(cap, dx));
+      } else {
+        p.x += (target - p.w / 2 - p.x) * 0.28;
+      }
       p.x = Math.max(8, Math.min(W - p.w - 8, p.x));
       if (state.mode === 'ready' && --state.attractWait <= 0) launch();
 
