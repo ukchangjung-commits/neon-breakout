@@ -1347,12 +1347,12 @@
       const t = (state.tick - attractPhaseStart) % 1800;
       if (ph === 'jackpot') {
         // 잭팟 — 이미 무장 완료. 버프 유지용 소량만 드롭, 화력은 발사율·폭죽으로
-        if (Math.random() < 0.18) spawnItem(cx, cy, ['bomb', 'rapid', 'quad'][Math.floor(Math.random() * 3)]);
+        if (Math.random() < 0.09) spawnItem(cx, cy, ['bomb', 'rapid', 'quad'][Math.floor(Math.random() * 3)]);
         return;
       }
       if (ph === 'pro' && t >= 1320) {
         // 프로 뒷부분 — 모든 아이템(폭탄·4줄·연사·확장·멀티볼·에너지·보호막)을 하나씩 자연스럽게 흘려 잭팟 전에 다 모으게
-        if (Math.random() < 0.35) {
+        if (Math.random() < 0.175) {
           const arsenal = ['bomb', 'quad', 'rapid', 'wide', 'multi', 'energy', 'shield'];
           const key = arsenal[proArsenalIdx++ % arsenal.length];
           if (key === 'shield') spawnHeartDrop(cx, cy, Math.random() < 0.5 ? -1 : 1, true); // 파란 하트 = 보호막
@@ -1360,7 +1360,7 @@
         }
         return;
       }
-      if (Math.random() > 0.22) return; // 초보·프로 초반은 가끔만 (더 드물게, 차분)
+      if (Math.random() > 0.11) return; // 초보·프로 초반은 가끔만 (절반으로 더 드물게)
       if (ph === 'novice') {
         const r = Math.random();
         if (r < 0.4) spawnItem(cx, cy, 'wide');        // 패들 성장
