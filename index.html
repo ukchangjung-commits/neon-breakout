@@ -475,6 +475,7 @@
   // ---- 난이도 스케일링 — 12지신 색동 단계(보스 48마리 = 1단계)에 비례 ----
   // 시작 화면에서 1~10단계 수동 선택 가능 (null = 자동: 이니셜 진행 기반)
   let manualStage = null;
+  let demoNL = 0; // 데모 일반 레벨 로테이션 (보스와 교대 등장용)
   {
     const savedStage = safeStore.get('neon-breakout-stage', null);
     if (savedStage !== null && savedStage !== 'auto') {
@@ -1410,8 +1411,8 @@
       state.boss = null;
       sfx.bossDie();
       if (state.attract) {
-        // 데모 — 기록 갱신 없이 다음 레벨로 자동 진행 (clear 대기 없음 → 소프트락 방지)
-        state.level = (state.level % 4) + 1;
+        // 데모 — 보스 격파 후엔 다음 일반 레벨로 (일반↔보스 교대, 소프트락 방지)
+        state.level = (demoNL = (demoNL % 3) + 1);
         buildLevel(); resetBall(true); state.attractWait = 40;
         return;
       }
@@ -1528,8 +1529,8 @@
     if (state.boss) return; // 보스전은 보스 격파로만 클리어
     if (state.bricks.length === 0) {
       if (state.attract) {
-        // 데모는 1~4레벨 순환 — 4레벨(보스)도 한 번씩 등장
-        state.level = (state.level % 4) + 1;
+        // 데모 — 일반 레벨 클리어 후엔 보스로 (방어 모드 자주 노출)
+        state.level = 4;
         buildLevel();
         resetBall(true);
         state.attractWait = 40;
@@ -1565,8 +1566,9 @@
     // 데모 AI — 완급: 초보(비틀비틀) → 프로(칼컨트롤) → 잭팟(축제)
     if (state.attract) {
       // 교육용 — 가끔 하트를 떨궈 '하트 먹기(목숨 +1)'도 보여줌
-      if (state.tick % 780 === 200) {
-        spawnHeartDrop(W / 2 + (Math.random() * 140 - 70), 92, Math.random() < 0.5 ? -1 : 1, Math.random() < 0.25);
+      if (state.tick % 600 === 200) {
+        // 분홍(목숨+1)·파랑(실드 7초) 번갈아 스폰 — 둘 다 자주 보여줌
+        spawnHeartDrop(W / 2 + (Math.random() * 140 - 70), 92, Math.random() < 0.5 ? -1 : 1, Math.floor(state.tick / 600) % 2 === 0);
       }
       const phase = getAttractPhase();
       if (phase !== attractPhase) {
@@ -1707,8 +1709,8 @@
       if (boss.x < 16 || boss.x + boss.w > W - 16) {
         boss.vx = -boss.vx;
         boss.x = Math.max(16, Math.min(W - 16 - boss.w, boss.x));
-        // 눈 색 룰렛 — 방향을 바꿀 때마다 랜덤, 10% 확률로 자기색(반사 모드)
-        if (Math.random() < 0.10) {
+        // 눈 색 룰렛 — 방향 바꿀 때마다 랜덤. 자기색(반사 모드): 실제 10% / 데모는 50%(교육용 자주 노출)
+        if (Math.random() < (state.attract ? 0.5 : 0.10)) {
           boss.eyeColor = boss.tierColor;
           boss.reflect = true;
           sfx.reflectOn();
