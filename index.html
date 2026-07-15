@@ -503,7 +503,7 @@
   let recordsOpen = false, recordsList = [], simMenu = false, selRecordIdx = -1;
   function startBtnRect() { const w = Math.min(210, W * 0.34); return { x: W / 2 - w - 8, y: H / 2 + 36, w: w, h: 46 }; }
   function recordsBtnRect() { const w = Math.min(210, W * 0.34); return { x: W / 2 + 8, y: H / 2 + 36, w: w, h: 46 }; }
-  function recordsCloseRect() { return { x: W / 2 - 90, y: H - 58, w: 180, h: 44 }; }
+  function recordsCloseRect() { const w = Math.min(320, W - 40); return { x: W / 2 - w / 2, y: H - 58, w: w, h: 44 }; }
   function openRecords() {
     recordsList = (cloudAll && cloudAll.length) ? cloudAll : loadRecords();
     state.rankScroll = 0;
