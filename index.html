@@ -116,7 +116,7 @@
   }
   /* ---- 도움말 버튼 & 패널 ---- */
   .cabinet { position: relative; }
-  #helpBtn, #muteBtn {
+  #helpBtn, #muteBtn, #fsBtn {
     width: 60px; height: 60px;
     border: 1px solid var(--line);
     border-radius: 10px;
@@ -128,7 +128,8 @@
     flex: none;
   }
   #muteBtn { font-size: 28px; }
-  #helpBtn:hover, #muteBtn:hover { border-color: var(--cyan); box-shadow: 0 0 10px rgba(34, 230, 255, 0.35); }
+  #fsBtn { font-size: 30px; }
+  #helpBtn:hover, #muteBtn:hover, #fsBtn:hover { border-color: var(--cyan); box-shadow: 0 0 10px rgba(34, 230, 255, 0.35); }
   .help-panel {
     display: none;
     position: absolute;
@@ -321,13 +322,14 @@
         <div class="ammo-row" id="ammoBomb"></div>
       </div>
       <button id="muteBtn" title="소리 켜기/끄기" aria-label="음소거">🔊</button>
+      <button id="fsBtn" title="전체 화면 (F)" aria-label="전체 화면">⛶</button>
       <button id="helpBtn" title="조작법 보기" aria-label="도움말">?</button>
     </div>
   </div>
   <div class="screen"><canvas id="game" width="720" height="900"></canvas></div>
   <div id="helpPanel" class="help-panel">
     마우스 또는 <kbd>←</kbd> <kbd>→</kbd> 이동 · <kbd>Space</kbd> 공 발사 / <b>일시정지</b> ·
-    <kbd>X</kbd> 또는 <b>클릭(꾹)</b> 레이저 · <kbd>N</kbd> <b>새 게임</b><br>
+    <kbd>X</kbd> 또는 <b>클릭(꾹)</b> 레이저 · <kbd>N</kbd> <b>새 게임</b> · <kbd>F</kbd>/⛶ <b>전체 화면</b><br>
     <span style="color:#22e6ff">R</span>·<span style="color:#ff3df0">B</span> 아이템을 먹으면 버프 + 우상단에 <b>세트 적립(각 최대 5)</b> —
     발동: <b>탄창(연사 25발)</b> = <kbd>Q</kbd> 또는 <b>휠클릭</b> · <b>폭탄(5발)</b> = <kbd>W</kbd> 또는 <b>우클릭</b> (에너지 소모 없음)<br>
     화면을 클릭하면 <b>마우스가 게임에 고정</b>됩니다 (커서가 밖으로 안 나감) · <kbd>ESC</kbd>로 해제<br>
@@ -979,23 +981,28 @@
     // 200점 단위 돌파 → 축포!
     const crossed = Math.floor(state.score / 200) - Math.floor(before / 200);
     if (crossed > 0) celebrate(Math.floor(state.score / 200) * 200);
-    // 30000점 단위 돌파 → CI가 번쩍이며 하트를 떨어뜨림 (받아야 +1)
-    const k1000 = Math.floor(state.score / 30000) - Math.floor(before / 30000);
-    if (k1000 > 0) {
-      triggerCiHeartDrop(2); // 항상 2개 — 좌우로 흩어져 낙하
+    // 10000점마다 파란 하트(실드), 30000점마다 분홍 하트(목숨) — CI가 번쩍이며 낙하
+    const k10 = Math.floor(state.score / 10000) - Math.floor(before / 10000);
+    const k30 = Math.floor(state.score / 30000) - Math.floor(before / 30000);
+    if (k10 > 0 || k30 > 0) {
+      triggerCiHeartDrop(k30 > 0, k10 > 0);
       sfx.fanfare();
-      confettiBlast();
-      showToast('💖 ' + Math.floor(state.score / 30000) * 30000 + '점 돌파! CI가 하트를 떨어뜨린다!', '#ff5577');
+      if (k30 > 0) {
+        confettiBlast();
+        showToast('💖 ' + Math.floor(state.score / 30000) * 30000 + '점! 하트 + 실드 낙하!', '#ff5577');
+      } else {
+        showToast('🛡 ' + Math.floor(state.score / 10000) * 10000 + '점! 파란 하트 낙하!', '#3fa9ff');
+      }
     }
     updateHud();
   }
 
   // ---- 30000점 보너스 — CI 후광 번쩍 + 하트 낙하 ----
-  let ciFlash = null; // { s: 대상 별, t: 남은 프레임, hearts, spawned }
-  function triggerCiHeartDrop(n) {
+  let ciFlash = null; // { s: 대상 별, t: 남은 프레임, pink, blue, spawned }
+  function triggerCiHeartDrop(pink, blue) {
     const bigs = ciStars.filter(st => st.w >= 150); // 상단 대형 로고 우선
     const pool = bigs.length ? bigs : ciStars;
-    ciFlash = { s: pool[Math.floor(Math.random() * pool.length)], t: 110, hearts: n, spawned: false };
+    ciFlash = { s: pool[Math.floor(Math.random() * pool.length)], t: 110, pink, blue, spawned: false };
   }
   function spawnHeartDrop(x, y, dir, blue) {
     const bx = Math.max(20, Math.min(W - 20, x));
@@ -1943,9 +1950,14 @@
         if (!ciFlash.spawned && ciFlash.t <= 55) {
           ciFlash.spawned = true;
           const s = ciFlash.s;
-          for (let i = 0; i < ciFlash.hearts; i++) {
-            const dir = ciFlash.hearts === 1 ? (Math.random() < 0.5 ? -1 : 1) : (i === 0 ? -1 : 1);
-            spawnHeartDrop(s.x + dir * 40, s.y + 30, dir, i === 1); // 두 번째는 파란 실드 하트
+          const both = ciFlash.pink && ciFlash.blue;
+          if (ciFlash.pink) { // 분홍 = 목숨
+            const dir = both ? -1 : (Math.random() < 0.5 ? -1 : 1);
+            spawnHeartDrop(s.x + dir * 40, s.y + 30, dir, false);
+          }
+          if (ciFlash.blue) { // 파랑 = 실드
+            const dir = both ? 1 : (Math.random() < 0.5 ? -1 : 1);
+            spawnHeartDrop(s.x + dir * 40, s.y + 30, dir, true);
           }
         }
         if (ciFlash.t <= 0) ciFlash = null;
@@ -2802,6 +2814,7 @@
     lastInputTick = state.tick;
     // 데모 중 — Space/Enter로 게임 시작
     if (state.attract) {
+      if (e.code === 'KeyF') { toggleFullscreen(); return; } // 시작 화면에서도 전체 화면
       if (e.code === 'Space' || e.code === 'Enter' || e.code === 'KeyN') {
         e.preventDefault();
         ensureAudio();
@@ -2836,6 +2849,7 @@
     if (e.code === 'KeyQ') { ensureAudio(); useAmmoSet('rapid'); } // 탄창 세트
     if (e.code === 'KeyW') { ensureAudio(); useAmmoSet('bomb'); }  // 폭탄 세트
     if (e.code === 'KeyX') { ensureAudio(); state.firing = true; tryShoot(); }
+    if (e.code === 'KeyF') toggleFullscreen(); // 전체 화면
   });
   document.addEventListener('keyup', (e) => {
     if (e.code === 'ArrowLeft') state.keys.left = false;
@@ -2954,7 +2968,8 @@
     }
     if (e.button === 1) { e.preventDefault(); useAmmoSet('rapid'); return; } // 휠클릭 — 탄창
     if (e.button === 2) { useAmmoSet('bomb'); return; }                      // 우클릭 — 폭탄
-    requestLock();
+    // 포인터 잠금은 플레이/발사대기 중에만 — 종료·기록 화면에선 커서 유지
+    if (state.mode === 'play' || state.mode === 'ready') requestLock();
     if (state.mode === 'play') { state.firing = true; tryShoot(); }
     else onAction();
   });
@@ -3017,6 +3032,23 @@
     e.stopPropagation();
     helpPanel.classList.toggle('open');
     helpBtn.blur(); // Space가 버튼을 다시 누르지 않게
+  });
+
+  // 전체 화면 토글 — F 키 / ⛶ 버튼 (노션 임베드에서 크게 보기)
+  function toggleFullscreen() {
+    try {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else if (document.documentElement.requestFullscreen) {
+        const r = document.documentElement.requestFullscreen();
+        if (r && r.catch) r.catch(() => {}); // 임베드가 막으면 조용히 무시
+      }
+    } catch (e) {}
+  }
+  const fsBtn = document.getElementById('fsBtn');
+  fsBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleFullscreen();
+    fsBtn.blur();
   });
 
   // 음소거 토글 (BGM + 효과음 전체)
