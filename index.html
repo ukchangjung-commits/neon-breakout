@@ -475,7 +475,8 @@
   // ---- 난이도 스케일링 — 12지신 색동 단계(보스 48마리 = 1단계)에 비례 ----
   // 시작 화면에서 1~10단계 수동 선택 가능 (null = 자동: 이니셜 진행 기반)
   let manualStage = null;
-  let demoNL = 0; // 데모 일반 레벨 로테이션 (보스와 교대 등장용)
+  let demoNL = 0; // 데모 레벨 시퀀스 인덱스
+  const DEMO_LEVELS = [1, 2, 4, 3, 4]; // 데모 순환: 일반 3판 + 보스(4) 2판 — 보스 자주, 일반도 충분히
   {
     const savedStage = safeStore.get('neon-breakout-stage', null);
     if (savedStage !== null && savedStage !== 'auto') {
@@ -1411,8 +1412,9 @@
       state.boss = null;
       sfx.bossDie();
       if (state.attract) {
-        // 데모 — 보스 격파 후엔 다음 일반 레벨로 (일반↔보스 교대, 소프트락 방지)
-        state.level = (demoNL = (demoNL % 3) + 1);
+        // 데모 — 보스 격파 후 다음 레벨로 (일반/보스 시퀀스 순환, 소프트락 방지)
+        demoNL = (demoNL + 1) % DEMO_LEVELS.length;
+        state.level = DEMO_LEVELS[demoNL];
         buildLevel(); resetBall(true); state.attractWait = 40;
         return;
       }
@@ -1453,9 +1455,9 @@
     spawnParticles(x, H - 34, '#ff5555', 40, 2.5);
     spawnParticles(x, H - 34, '#ffc233', 24, 2);
     state.shake = 16;
-    state.hitFx = 90;   // 피격 연출 (~1.5초)
+    state.hitFx = state.attract ? 20 : 90;   // 피격 연출(실플레이 ~1.5초) — 데모는 짧게(화면 안 가림)
     state.hitFxX = x;
-    state.freeze = 25;  // 히트스톱 — 게임이 잠깐 멈춰서 확실히 인지
+    state.freeze = state.attract ? 0 : 25;  // 히트스톱(실플레이만) — 데모는 반격폭탄 세례 시 정지 방지
     sfx.bombOuch();     // 퍼~엉 + 엌!
     triggerJackpot();   // 12지신 잭팟 스핀
     if (state.attract) {
@@ -1529,8 +1531,9 @@
     if (state.boss) return; // 보스전은 보스 격파로만 클리어
     if (state.bricks.length === 0) {
       if (state.attract) {
-        // 데모 — 일반 레벨 클리어 후엔 보스로 (방어 모드 자주 노출)
-        state.level = 4;
+        // 데모 — 다음 레벨로 (일반/보스 시퀀스 순환)
+        demoNL = (demoNL + 1) % DEMO_LEVELS.length;
+        state.level = DEMO_LEVELS[demoNL];
         buildLevel();
         resetBall(true);
         state.attractWait = 40;
@@ -1710,7 +1713,7 @@
         boss.vx = -boss.vx;
         boss.x = Math.max(16, Math.min(W - 16 - boss.w, boss.x));
         // 눈 색 룰렛 — 방향 바꿀 때마다 랜덤. 자기색(반사 모드): 실제 10% / 데모는 50%(교육용 자주 노출)
-        if (Math.random() < (state.attract ? 0.5 : 0.10)) {
+        if (Math.random() < (state.attract ? 0.3 : 0.10)) {
           boss.eyeColor = boss.tierColor;
           boss.reflect = true;
           sfx.reflectOn();
