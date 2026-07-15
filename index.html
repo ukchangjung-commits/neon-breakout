@@ -481,6 +481,7 @@
   let demoFadeAction = 'level';        // 암전 시 동작: 'level'(다음 레벨) / 'restart'(새 데모)
   let demoMultiCount = 0;              // 데모: 이번 레벨 멀티볼 발동 횟수 (레벨당 1~2회 제한)
   let proArsenalIdx = 0;               // 데모 프로 뒷부분: 모든 아이템을 순서대로 하나씩 흘리기
+  let jackpotArsenal = [];             // 잭팟 초반 벽돌에서 순서대로 내보낼 파워업 큐 (인과)
   {
     const savedStage = safeStore.get('neon-breakout-stage', null);
     if (savedStage !== null && savedStage !== 'auto') {
@@ -1346,8 +1347,9 @@
       const ph = getAttractPhase();
       const t = (state.tick - attractPhaseStart) % 1800;
       if (ph === 'jackpot') {
-        // 잭팟 — 이미 무장 완료. 버프 유지용 소량만 드롭, 화력은 발사율·폭죽으로
-        if (Math.random() < 0.09) spawnItem(cx, cy, ['bomb', 'rapid', 'quad'][Math.floor(Math.random() * 3)]);
+        // 잭팟 초반 — 깨진 벽돌에서 파워업을 순서대로 내보내 완전 무장(인과). 이후엔 버프 유지용 소량
+        if (jackpotArsenal.length) spawnItem(cx, cy, jackpotArsenal.shift());
+        else if (Math.random() < 0.09) spawnItem(cx, cy, ['bomb', 'rapid', 'quad'][Math.floor(Math.random() * 3)]);
         return;
       }
       if (ph === 'pro' && t >= 1320) {
@@ -1636,17 +1638,19 @@
     // 데모 AI — 완급: 초보(비틀비틀) → 프로(칼컨트롤) → 잭팟(축제)
     if (state.attract) {
       updateDemoFade(); // 레벨 전환 페이드(아웃→교체→인) 진행
-      // 교육용 — 가끔 하트를 떨궈 '하트 먹기(목숨 +1)'도 보여줌
-      if (state.tick % 600 === 200) {
-        // 분홍(목숨+1)·파랑(실드 7초) 번갈아 스폰 — 둘 다 자주 보여줌
-        spawnHeartDrop(W / 2 + (Math.random() * 140 - 70), 92, Math.random() < 0.5 ? -1 : 1, Math.floor(state.tick / 600) % 2 === 0);
-      }
+      // 교육용 — 가끔 CI가 번쩍이며 분홍 하트(목숨 +1)를 떨굼 (인과: 하늘에서 무단 생성 금지). 파란 하트=보호막은 잭팟 시작에
+      if (state.tick % 600 === 200) triggerCiHeartDrop(true, false);
       const phase = getAttractPhase();
       if (phase !== attractPhase) {
         const prevPhase = attractPhase;
         attractPhase = phase;
-        if (phase === 'pro') { proArsenalIdx = 0; triggerCiHeartDrop(false, true); } // 순서 초기화 + 보호막(파란 하트) 즉시 투하 → 잭팟까지 유지
-        if (phase === 'jackpot') { confettiBlast(); triggerJackpot(); }
+        if (phase === 'pro') proArsenalIdx = 0; // 프로 뒷부분 아이템 흘리기 순서 초기화
+        if (phase === 'jackpot') {
+          confettiBlast(); triggerJackpot();
+          // 잭팟 시작 — 초반 깨지는 벽돌에서 파워업이 순서대로 나와 완전 무장(인과). 보호막은 CI에서
+          jackpotArsenal = ['wide', 'rapid', 'quad', 'bomb', 'energy', 'multi'];
+          triggerCiHeartDrop(false, true);
+        }
         if (phase === 'novice' && prevPhase === 'jackpot') demoBeginRestart(); // 20초 데모 종료 → 빠른 페이드 후 새 데모
       }
       // 1순위: 내려오는 공 추적 (생존)
@@ -1887,11 +1891,11 @@
         if (d.heart) { // 하트 — 분홍: 목숨 +1 / 파랑: 프로토스 실드 15초
           state.drops.splice(i, 1);
           if (d.blue) {
-            state.shield = state.attract ? 900 : 420; // 데모 15초(프로 시작~잭팟까지) / 실플레이 7초
+            state.shield = 420; // 7초 (잭팟 시작에 먹으면 잭팟 5초를 덮음)
             state.shieldFlash = 10;
             sfx.shieldOn();
             spawnParticles(d.x, H - 40, '#3fa9ff', 26, 1.8);
-            showToast(state.attract ? '🛡 보호막!' : '🛡 보호막! 7초', '#3fa9ff');
+            showToast('🛡 보호막! 7초', '#3fa9ff');
           } else {
             state.lives++;
             updateHud();
