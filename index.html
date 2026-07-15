@@ -478,6 +478,8 @@
   let demoNL = 0; // 데모 레벨 시퀀스 인덱스
   const DEMO_LEVELS = [1, 2, 4, 3, 4]; // 데모 순환: 일반 3판 + 보스(4) 2판 — 보스 자주, 일반도 충분히
   let demoFade = 0, demoFadeDir = 0;   // 데모 레벨 전환 페이드 (0 없음 / +1 아웃 / -1 인)
+  let demoFadeAction = 'level';        // 암전 시 동작: 'level'(다음 레벨) / 'restart'(새 데모)
+  let demoMultiCount = 0;              // 데모: 이번 레벨 멀티볼 발동 횟수 (레벨당 1~2회 제한)
   {
     const savedStage = safeStore.get('neon-breakout-stage', null);
     if (savedStage !== null && savedStage !== 'auto') {
@@ -534,13 +536,23 @@
     state.attractWait = 30;
   }
   // 데모 레벨 전환 — 페이드 아웃 시작(중복 방지). 완전 암전 시 updateDemoFade가 레벨 교체 후 페이드 인
-  function demoBeginTransition() { if (demoFadeDir === 0) demoFadeDir = 1; }
+  function demoBeginTransition() { if (demoFadeDir === 0) { demoFadeDir = 1; demoFadeAction = 'level'; } }
+  function demoBeginRestart() { demoFadeDir = 1; demoFadeAction = 'restart'; } // 20초 데모 종료 — 진행 중 페이드도 덮어씀
   function updateDemoFade() {
-    if (demoFadeDir === 1) {                       // 아웃 — 어두워짐
-      demoFade = Math.min(1, demoFade + 0.09);
-      if (demoFade >= 1) {                         // 암전 → 레벨 교체
-        demoNL = (demoNL + 1) % DEMO_LEVELS.length;
-        state.level = DEMO_LEVELS[demoNL];
+    if (demoFadeDir === 1) {                       // 아웃 — 어두워짐 (재시작은 빠르게)
+      demoFade = Math.min(1, demoFade + (demoFadeAction === 'restart' ? 0.16 : 0.09));
+      if (demoFade >= 1) {                         // 암전 순간
+        if (demoFadeAction === 'restart') {        // 새 데모 — 전부 초기화 (레벨1·점수·목숨·버프·페이즈)
+          demoNL = 0; state.level = DEMO_LEVELS[0];
+          state.score = 0; recentGain = 0; state.lives = 5; state.deaths = 0;
+          state.bombHits = 0; state.grow = 0; state.shield = 0;
+          state.ammo = { rapid: 0, bomb: 0 };
+          clearBuffs();
+          attractPhaseStart = state.tick; attractPhase = 'novice';
+        } else {                                   // 다음 레벨
+          demoNL = (demoNL + 1) % DEMO_LEVELS.length;
+          state.level = DEMO_LEVELS[demoNL];
+        }
         buildLevel(); resetBall(true); state.attractWait = 40;
         demoFadeDir = -1;                          // 페이드 인 시작
       }
@@ -932,6 +944,7 @@
   function buildLevel() {
     state.bricks = [];
     state.boss = null;
+    demoMultiCount = 0; // 레벨마다 멀티볼 카운트 리셋
     const cols = Math.max(12, Math.round(W / 45)); // 720px 기준 16열, 화면 폭에 비례
     const pad = 5, top = 70, side = 20;
     const bw = (W - side * 2 - pad * (cols - 1)) / cols;
@@ -1320,6 +1333,10 @@
       type: hazard ? null : pickItemType(),
     });
   }
+  // 특정 아이템을 확정 스폰 (데모 잭팟에서 '먹어서' 화려해지도록)
+  function spawnItem(x, y, key) {
+    state.drops.push({ x, y, vy: 2.0, hazard: false, type: ITEM_TYPES.find(t => t.key === key) || pickItemType() });
+  }
 
   function maybeDrop(brick) {
     if (state.combo < 2) return;
@@ -1355,6 +1372,8 @@
       return;
     }
     if (type.key === 'multi') {
+      if (state.attract && demoMultiCount >= 2) return; // 데모: 레벨당 멀티볼 1~2회만
+      if (state.attract) demoMultiCount++;
       splitBalls();
       showToast('멀티볼! x' + state.balls.length, type.color);
       return;
@@ -1589,9 +1608,10 @@
       }
       const phase = getAttractPhase();
       if (phase !== attractPhase) {
+        const prevPhase = attractPhase;
         attractPhase = phase;
-        if (phase === 'novice') { state.score = 0; recentGain = 0; state.lives = 5; state.deaths = 0; state.bombHits = 0; state.grow = 0; updatePaddleWidth(); } // 새 사이클 — 초기화(패들·목숨 리셋)
         if (phase === 'jackpot') { confettiBlast(); triggerJackpot(); }
+        if (phase === 'novice' && prevPhase === 'jackpot') demoBeginRestart(); // 20초 데모 종료 → 빠른 페이드 후 새 데모
       }
       // 1순위: 내려오는 공 추적 (생존)
       let target = W / 2, bestY = -1;
@@ -1649,20 +1669,13 @@
         if (state.energy > 30 && Math.random() < fireRate) tryShoot();
 
         if (phase === 'pro') {
-          // 프로 — "이렇게 하면 점수 많이!": 저장 세트 발동 + 멀티볼 유지
+          // 프로 — 먹어서 얻은 세트(연사·폭탄)만 발동 (아이템 없이 변하지 않음)
           if (state.tick % 150 === 0 && state.ammo.rapid > 0) useAmmoSet('rapid');
           if (state.tick % 210 === 0 && state.ammo.bomb > 0) useAmmoSet('bomb');
-          if (state.balls.length < 2 && state.tick % 300 === 0) splitBalls();
         }
         if (phase === 'jackpot') {
-          // 잭팟 — 신나게 펑펑: 4줄+고속 폭풍 + 멀티볼 + 점수 샤워 + 폭죽·색종이 (게임하고 싶게)
-          state.buffs.quad = Math.max(state.buffs.quad, 40);
-          state.buffs.rapid = Math.max(state.buffs.rapid, 40);
-          if (state.balls.length < 3 && state.tick % 110 === 0) splitBalls();
-          if (state.tick % 4 === 0) {
-            state.score += 40 + Math.floor(Math.random() * 160);
-            recentGain += 100; // 자리수 펑펑
-          }
+          // 잭팟 — 좋은 아이템을 뿌려 '먹어서' 화려하게(강제 버프·멀티볼 없음) + 폭죽·색종이 축제
+          if (state.tick % 40 === 0) spawnItem(60 + Math.random() * (W - 120), 90, Math.random() < 0.5 ? 'quad' : 'rapid');
           if (state.tick % 48 === 0) {
             for (let i = 0; i < 2; i++) {
               state.fireworks.push({
