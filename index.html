@@ -119,7 +119,7 @@
   }
   /* ---- 도움말 버튼 & 패널 ---- */
   .cabinet { position: relative; }
-  #helpBtn, #muteBtn, #fsBtn, #exitBtn {
+  #helpBtn, #muteBtn, #fsBtn, #exitBtn, #pauseBtn {
     width: clamp(32px, calc(var(--uw, 100vw) * 0.072), 60px);
     height: clamp(32px, calc(var(--uw, 100vw) * 0.072), 60px);
     border: 1px solid var(--line);
@@ -132,7 +132,10 @@
     flex: none;
     display: flex; align-items: center; justify-content: center;
   }
-  #muteBtn svg, #fsBtn svg { width: 56%; height: 56%; display: block; }
+  #muteBtn svg, #fsBtn svg, #pauseBtn svg { width: 56%; height: 56%; display: block; }
+  #pauseBtn { color: #2effc8; text-shadow: 0 0 8px rgba(46, 255, 200, 0.6); }
+  .ctrl-group { display: flex; align-items: center; gap: clamp(4px, calc(var(--uw, 100vw) * 0.018), 16px); }
+  .cabinet.playing .ctrl-group { display: none; }   /* 플레이 중엔 4버튼 숨김 → SPACE만 */
   #exitBtn { width: auto; padding: 0 clamp(6px, calc(var(--uw, 100vw) * 0.014), 14px); color: #ff5577; font-size: clamp(11px, calc(var(--uw, 100vw) * 0.022), 16px); text-shadow: 0 0 8px rgba(255, 85, 119, 0.6); }
   #exitBtn:hover { border-color: #ff5577; box-shadow: 0 0 10px rgba(255, 85, 119, 0.4); }
   #helpBtn:hover, #muteBtn:hover, #fsBtn:hover { border-color: var(--cyan); box-shadow: 0 0 10px rgba(34, 230, 255, 0.35); }
@@ -342,10 +345,13 @@
         <div class="energy-bar"><div id="energyFill"></div></div>
         <div class="ammo-row" id="ammoBomb"></div>
       </div>
-      <button id="muteBtn" title="소리 켜기/끄기" aria-label="음소거"></button>
-      <button id="fsBtn" title="전체 화면 (F)" aria-label="전체 화면"></button>
-      <button id="helpBtn" title="조작법 보기" aria-label="도움말">?</button>
-      <button id="exitBtn" title="게임 종료 (시작화면으로)" aria-label="종료">EXIT</button>
+      <button id="pauseBtn" title="스페이스 — 일시정지 / 계속" aria-label="일시정지"></button>
+      <div class="ctrl-group" id="ctrlGroup">
+        <button id="muteBtn" title="소리 켜기/끄기" aria-label="음소거"></button>
+        <button id="fsBtn" title="전체 화면 (F)" aria-label="전체 화면"></button>
+        <button id="helpBtn" title="조작법 보기" aria-label="도움말">?</button>
+        <button id="exitBtn" title="게임 종료 (시작화면으로)" aria-label="종료">EXIT</button>
+      </div>
     </div>
   </div>
   <div class="screen"><canvas id="game" width="720" height="900"></canvas></div>
@@ -436,6 +442,8 @@
   const SVG_SOUND_ON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="4 9 4 15 8 15 13 19 13 5 8 9" fill="currentColor" stroke="none"/><path d="M16 8.5a3.5 3.5 0 0 1 0 7"/><path d="M18.8 5.7a7 7 0 0 1 0 12.6"/></svg>';
   const SVG_SOUND_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="4 9 4 15 8 15 13 19 13 5 8 9" fill="currentColor" stroke="none"/><line x1="16" y1="9.5" x2="21" y2="14.5"/><line x1="21" y1="9.5" x2="16" y2="14.5"/></svg>';
   const SVG_FS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
+  const SVG_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
+  const SVG_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="7 5 19 12 7 19"/></svg>';
 
   const scoreEl = document.getElementById('score');
   const bestEl = document.getElementById('best');
@@ -2949,6 +2957,7 @@
     updateScoreDisplay();
     updateAmmoPanel();
     updateEnergyBar();
+    updateChrome();
     requestAnimationFrame(loop);
   }
 
@@ -3134,7 +3143,7 @@
       canvas.style.cursor = overUi ? 'pointer' : '';
       return; // 데모 중 패들은 AI가 조종
     }
-    if (canvas.style.cursor) canvas.style.cursor = ''; // 입력 화면을 벗어나면 커서 복원
+    if (state.mode !== 'play' && canvas.style.cursor === 'pointer') canvas.style.cursor = ''; // 플레이 중 'none' 유지
     if (pointerLocked) {
       const rect = canvas.getBoundingClientRect();
       const mv = (e.movementX || 0) / _mvScale; // undefined→NaN 방어 + Safari DPR 보정
@@ -3270,6 +3279,32 @@
     if (!state.attract) enterAttract();
     exitBtn.blur();
   });
+
+  // SPACE 버튼 — 키보드 Space와 동일(일시정지/계속). 플레이 중엔 이것만 보임
+  const pauseBtn = document.getElementById('pauseBtn');
+  pauseBtn.innerHTML = SVG_PLAY;
+  function pressSpace() {
+    ensureAudio();
+    if (state.attract) { startRealGame(); return; }
+    if (state.mode === 'entry') return; // 이니셜 입력 중엔 무시
+    onAction(); // play↔pause 토글 등
+  }
+  pauseBtn.addEventListener('click', (e) => { e.stopPropagation(); pressSpace(); pauseBtn.blur(); });
+  // 플레이 중: SPACE만·커서 숨김 / 일시정지·메뉴: 커서+4버튼 표시
+  let lastActive = null;
+  function updateChrome() {
+    const active = (state.mode === 'play' && !state.attract);
+    if (active === lastActive) return;
+    lastActive = active;
+    document.querySelector('.cabinet').classList.toggle('playing', active);
+    canvas.style.cursor = active ? 'none' : '';
+    pauseBtn.innerHTML = active ? SVG_PAUSE : SVG_PLAY;
+    if (!active) { // 일시정지 시 포인터락 해제 → 커서·버튼 클릭 복원
+      const ex = document.exitPointerLock || document.webkitExitPointerLock || document.mozExitPointerLock;
+      const el = document.pointerLockElement || document.webkitPointerLockElement || document.mozPointerLockElement;
+      if (ex && el === canvas) ex.call(document);
+    }
+  }
 
   // 전체 화면 토글 — F 키 / ⛶ 버튼 (노션 임베드에서 크게 보기)
   function toggleFullscreen() {
