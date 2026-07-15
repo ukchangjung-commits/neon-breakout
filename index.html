@@ -335,6 +335,8 @@
     <b>콤보 2 이상</b>으로 벽돌을 깨면 뭔가 떨어져요 — <b>1/3은 아이템</b>(받기), <b style="color:#ff5555">2/3은 폭탄</b>(피하기! 레이저로 격추 +15점)<br>
     폭탄 피격: <b>1회 = 패들 1/2</b> → <b>2회 = 1/4 + <span style="color:#ff5555">빨간 경고</span></b> → <b style="color:#ff5555">3회 = 목숨 -1</b> (목숨을 잃으면 패들 복구)<br>
     손상 상태에서 <span style="color:#2effc8">W</span>를 먹으면 확장 대신 <b>한 단계 수리</b> · 1/4 손상 + <span style="color:#ff9a3d">S</span> 축소가 겹치면 <b>총알이 1발</b>만 나감<br>
+    30000점마다 CI가 번쩍이며 하트 2개 낙하 — <span style="color:#ff5577">♥ 분홍 = 목숨 +1</span> ·
+    <span style="color:#3fa9ff">♥ 파랑 = 실드 15초</span> (폭탄 파괴 · 공 난반사 · 아이템/총알은 통과)<br>
     아이템: <span style="color:#ffc233">Q</span> 4줄레이저 ·
     <span style="color:#22e6ff">R</span> 고속연사 ·
     <span style="color:#ff3df0">B</span> 폭탄레이저 ·
@@ -633,6 +635,10 @@
     fanfare:() => { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => beep(f, 0.18, 'square', 0.07), i * 110)); },
     gameOver:() => { [784, 659, 523, 392, 262, 196].forEach((f, i) => setTimeout(() => beep(f, 0.3, 'square', 0.07, -25), i * 230)); },
     bossHit:() => beep(140, 0.1, 'sawtooth', 0.06, 60),
+    // 프로토스 실드 — 발동 (차오르는 하모닉)
+    shieldOn: () => { if (!audio) return; const t = audio.currentTime; tone(220, t, 0.5, 'sine', 0.07, 260); tone(440, t + 0.1, 0.4, 'triangle', 0.05, 220); },
+    // 실드 피격 — 지잉! 에너지 산란
+    shieldHit: () => { if (!audio) return; const t = audio.currentTime; tone(900, t, 0.1, 'triangle', 0.06, 300); noise(t, 0.05, 0.03, 5000); },
     // 반사 모드 진입 — 낮게 웅- 하는 경고
     reflectOn: () => { if (!audio) return; const t = audio.currentTime; tone(160, t, 0.3, 'sawtooth', 0.06, 40); tone(320, t, 0.3, 'sine', 0.05, 60); },
     // 공격 반사 — 쨍! 금속성 핑
@@ -740,6 +746,7 @@
     entryName: '', tick: 0,
     hitFx: 0, hitFxX: 0, freeze: 0,
     dyingT: 0, // 게임 종료 연출 남은 프레임
+    shield: 0, shieldFlash: 0, // 프로토스 실드 (파란 하트, 900프레임 = 15초)
     rankScroll: 0, // 게임오버 랭킹 스크롤 위치
     runKills: 0, // 이번 판 보스 격파 수 (이니셜 귀속용)
     boss: null,
@@ -849,6 +856,7 @@
     if (!keepBuffs) {
       state.bombHits = 0; // 새 목숨 — 패들 손상 복구
       state.ammo = { rapid: 0, bomb: 0 }; // 죽으면 저장 세트도 소멸
+      state.shield = 0;   // 실드도 소멸
       clearBuffs();       // 레벨 클리어(keepBuffs) 시엔 버프·손상 유지
     }
   }
@@ -989,11 +997,11 @@
     const pool = bigs.length ? bigs : ciStars;
     ciFlash = { s: pool[Math.floor(Math.random() * pool.length)], t: 110, hearts: n, spawned: false };
   }
-  function spawnHeartDrop(x, y, dir) {
+  function spawnHeartDrop(x, y, dir, blue) {
     const bx = Math.max(20, Math.min(W - 20, x));
     state.drops.push({
       x: bx, baseX: bx,
-      y, vy: 1.05, heart: true, hazard: false, type: null,
+      y, vy: 1.05, heart: true, blue: !!blue, hazard: false, type: null,
       t: 0,
       ph: Math.random() * Math.PI * 2,             // 흔들림 위상
       amp: 45 + Math.random() * 30,                // 낙엽 흔들림 폭 45~75px
@@ -1460,6 +1468,7 @@
       }
     }
     if (state.toast && --state.toast.life <= 0) state.toast = null;
+    if (state.shield > 0) state.shield--; // 실드 타이머
 
     // 축포 처리 — 예약된 폭죽을 순차 발사
     for (let i = state.fireworks.length - 1; i >= 0; i--) {
@@ -1588,15 +1597,36 @@
         d.vy = Math.min(d.vy + 0.03, 3.6 + 0.2 * diffStage()); // 단계마다 낙하 최고속도 증가
       }
       if (d.y > H + 12) { state.drops.splice(i, 1); continue; }
+      // 프로토스 실드 — 폭탄은 보호막에 닿으면 파괴 (+15점), 아이템·하트는 통과
+      if (state.shield > 0 && d.hazard) {
+        const scx = p.x + p.w / 2, scy = H - 28;
+        const R = Math.max(p.w * 0.8, 100);
+        if (d.y < scy && Math.hypot(d.x - scx, d.y - scy) < R + 10) {
+          spawnParticles(d.x, d.y, '#3fa9ff', 20, 1.6);
+          addScore(15);
+          sfx.boom();
+          state.shieldFlash = 10;
+          state.drops.splice(i, 1);
+          continue;
+        }
+      }
       if (d.y + 9 >= H - 34 && d.y - 9 <= H - 34 + p.h + 6 &&
           d.x >= p.x - 10 && d.x <= p.x + p.w + 10) {
-        if (d.heart) { // 하트 캡슐 — 받으면 목숨 +1
+        if (d.heart) { // 하트 — 분홍: 목숨 +1 / 파랑: 프로토스 실드 15초
           state.drops.splice(i, 1);
-          state.lives++;
-          updateHud();
-          sfx.fanfare();
-          spawnParticles(d.x, H - 40, '#ff5577', 22, 1.6);
-          showToast('💖 하트 획득! +1 ♥', '#ff5577');
+          if (d.blue) {
+            state.shield = 900;
+            state.shieldFlash = 10;
+            sfx.shieldOn();
+            spawnParticles(d.x, H - 40, '#3fa9ff', 26, 1.8);
+            showToast('🛡 프로토스 실드! 15초', '#3fa9ff');
+          } else {
+            state.lives++;
+            updateHud();
+            sfx.fanfare();
+            spawnParticles(d.x, H - 40, '#ff5577', 22, 1.6);
+            showToast('💖 하트 획득! +1 ♥', '#ff5577');
+          }
         } else if (d.hazard) {
           state.drops.splice(i, 1);
           bombHitPaddle(d.x);
@@ -1616,6 +1646,29 @@
       if (b.x < b.r + 4) { b.x = b.r + 4; b.vx = Math.abs(b.vx); sfx.bounce(); }
       if (b.x > W - b.r - 4) { b.x = W - b.r - 4; b.vx = -Math.abs(b.vx); sfx.bounce(); }
       if (b.y < b.r + 4) { b.y = b.r + 4; b.vy = Math.abs(b.vy); sfx.bounce(); }
+
+      // 프로토스 실드 — 공(퍽)은 돔에서 난반사
+      if (state.shield > 0) {
+        const scx = p.x + p.w / 2, scy = H - 28;
+        const R = Math.max(p.w * 0.8, 100);
+        const dxs = b.x - scx, dys = b.y - scy;
+        const dist = Math.hypot(dxs, dys);
+        if (b.y < scy && dist < R + b.r && (b.vx * dxs + b.vy * dys) < 0) {
+          const nx = dxs / (dist || 1), ny = dys / (dist || 1);
+          const dot = b.vx * nx + b.vy * ny;
+          b.vx -= 2 * dot * nx; // 법선 반사
+          b.vy -= 2 * dot * ny;
+          const sp = Math.hypot(b.vx, b.vy);
+          const ang = Math.atan2(b.vy, b.vx) + (Math.random() - 0.5) * 0.6; // 난반사 산란
+          b.vx = Math.cos(ang) * sp;
+          b.vy = Math.sin(ang) * sp;
+          if (b.vy > -0.8) b.vy = -Math.abs(b.vy) - 0.8; // 위쪽으로 보장 (돔 안 갇힘 방지)
+          b.x = scx + nx * (R + b.r + 1); // 돔 밖으로 밀어내기
+          b.y = Math.min(scy - 1, scy + ny * (R + b.r + 1));
+          state.shieldFlash = 8;
+          sfx.shieldHit();
+        }
+      }
 
       // 패들 반사
       if (b.vy > 0 && b.y + b.r >= H - 34 && b.y + b.r <= H - 34 + p.h + 8 &&
@@ -1892,7 +1945,7 @@
           const s = ciFlash.s;
           for (let i = 0; i < ciFlash.hearts; i++) {
             const dir = ciFlash.hearts === 1 ? (Math.random() < 0.5 ? -1 : 1) : (i === 0 ? -1 : 1);
-            spawnHeartDrop(s.x + dir * 40, s.y + 30, dir);
+            spawnHeartDrop(s.x + dir * 40, s.y + 30, dir, i === 1); // 두 번째는 파란 실드 하트
           }
         }
         if (ciFlash.t <= 0) ciFlash = null;
@@ -1940,9 +1993,10 @@
         ctx.save();
         ctx.translate(d.x, d.y);
         ctx.rotate(tilt);
+        const hc = d.blue ? '#3fa9ff' : '#ff5577'; // 파란 하트 = 실드
         ctx.globalAlpha = tw;
-        ctx.fillStyle = '#ff5577';
-        ctx.shadowColor = '#ff5577';
+        ctx.fillStyle = hc;
+        ctx.shadowColor = hc;
         ctx.shadowBlur = 18 + 12 * tw;
         ctx.font = 'bold ' + Math.round(36 * pulse) + 'px Consolas, monospace';
         ctx.textAlign = 'center';
@@ -2065,6 +2119,33 @@
     }
     ctx.shadowBlur = 0;
 
+    // 프로토스 실드 — 패들을 감싸는 반원 보호막 (일렁이는 파란 글로우)
+    if (state.shield > 0) {
+      const scx = p.x + p.w / 2, scy = H - 28;
+      const R = Math.max(p.w * 0.8, 100);
+      const shimmer = 0.45 + 0.25 * Math.sin(state.tick * 0.15);
+      const flash = state.shieldFlash > 0 ? state.shieldFlash / 10 : 0;
+      const expiring = state.shield < 180 && state.tick % 20 < 8; // 만료 3초 전 깜빡 경고
+      ctx.save();
+      ctx.globalAlpha = expiring ? 0.22 : Math.min(1, shimmer + flash * 0.55);
+      ctx.strokeStyle = flash > 0 ? '#cfeaff' : '#3fa9ff';
+      ctx.lineWidth = 4 + flash * 5;
+      ctx.shadowColor = '#3fa9ff';
+      ctx.shadowBlur = 26 + flash * 22;
+      ctx.beginPath();
+      ctx.arc(scx, scy, R, Math.PI, Math.PI * 2);
+      ctx.stroke();
+      // 내부 은은한 에너지 충전 빛
+      ctx.globalAlpha *= 0.22;
+      ctx.fillStyle = '#3fa9ff';
+      ctx.beginPath();
+      ctx.arc(scx, scy, R, Math.PI, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      ctx.shadowBlur = 0;
+      if (state.shieldFlash > 0) state.shieldFlash--;
+    }
+
     // 공들
     for (const b of state.balls) {
       ctx.beginPath();
@@ -2158,6 +2239,13 @@
       ctx.fillStyle = '#7f7bff';
       ctx.font = 'bold 11px Consolas, monospace';
       ctx.fillText('M 멀티볼 x' + state.balls.length, 14, by + 9);
+      by += 18;
+    }
+    // 실드 남은 시간
+    if (state.shield > 0) {
+      ctx.fillStyle = '#3fa9ff';
+      ctx.font = 'bold 11px Consolas, monospace';
+      ctx.fillText('🛡 실드 ' + Math.ceil(state.shield / 60) + 's', 14, by + 9);
     }
 
     // 콤보 표시
