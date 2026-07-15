@@ -480,6 +480,7 @@
   let demoFade = 0, demoFadeDir = 0;   // 데모 레벨 전환 페이드 (0 없음 / +1 아웃 / -1 인)
   let demoFadeAction = 'level';        // 암전 시 동작: 'level'(다음 레벨) / 'restart'(새 데모)
   let demoMultiCount = 0;              // 데모: 이번 레벨 멀티볼 발동 횟수 (레벨당 1~2회 제한)
+  let proArsenalIdx = 0;               // 데모 프로 뒷부분: 모든 아이템을 순서대로 하나씩 흘리기
   {
     const savedStage = safeStore.get('neon-breakout-stage', null);
     if (savedStage !== null && savedStage !== 'auto') {
@@ -1345,19 +1346,21 @@
       const ph = getAttractPhase();
       const t = (state.tick - attractPhaseStart) % 1200;
       if (ph === 'jackpot') {
-        // 최대 화력 — 벽돌 하나에서 좋은 아이템 왕창 (폭탄레이저·연사·4줄, 가끔 멀티볼)
-        const kinds = ['bomb', 'rapid', 'quad', 'bomb', 'rapid', 'quad', 'multi'];
-        const n = 2 + Math.floor(Math.random() * 3); // 2~4개
-        for (let i = 0; i < n; i++) spawnItem(cx + (Math.random() * 46 - 23), cy, kinds[Math.floor(Math.random() * kinds.length)]);
+        // 잭팟 — 이미 무장 완료. 버프 유지용 소량만 드롭(과하지 않게), 화력은 발사율·폭죽으로
+        if (Math.random() < 0.3) spawnItem(cx, cy, ['bomb', 'rapid', 'quad'][Math.floor(Math.random() * 3)]);
         return;
       }
-      if (ph === 'pro' && t >= 780) {
-        // 프로 끝부분(~마지막 2초) — 폭탄 러시 (잭팟 직전 난이도 급상승 시연)
-        const n = 1 + Math.floor(Math.random() * 2); // 1~2개
-        for (let i = 0; i < n; i++) spawnDrop(cx + (Math.random() * 40 - 20), cy, true);
+      if (ph === 'pro' && t >= 720) {
+        // 프로 뒷부분 — 모든 아이템(폭탄·4줄·연사·확장·멀티볼·에너지·보호막)을 하나씩 자연스럽게 흘려 잭팟 전에 다 모으게
+        if (Math.random() < 0.5) {
+          const arsenal = ['bomb', 'quad', 'rapid', 'wide', 'multi', 'energy', 'shield'];
+          const key = arsenal[proArsenalIdx++ % arsenal.length];
+          if (key === 'shield') spawnHeartDrop(cx, cy, Math.random() < 0.5 ? -1 : 1, true); // 파란 하트 = 보호막
+          else spawnItem(cx, cy, key);
+        }
         return;
       }
-      if (Math.random() > 0.45) return; // 초보·프로 초반은 가끔만 (차분)
+      if (Math.random() > 0.4) return; // 초보·프로 초반은 가끔만 (차분)
       if (ph === 'novice') {
         const r = Math.random();
         if (r < 0.4) spawnItem(cx, cy, 'wide');        // 패들 성장
@@ -1644,6 +1647,7 @@
       if (phase !== attractPhase) {
         const prevPhase = attractPhase;
         attractPhase = phase;
+        if (phase === 'pro') proArsenalIdx = 0; // 프로 뒷부분 아이템 흘리기 순서 초기화
         if (phase === 'jackpot') { confettiBlast(); triggerJackpot(); }
         if (phase === 'novice' && prevPhase === 'jackpot') demoBeginRestart(); // 20초 데모 종료 → 빠른 페이드 후 새 데모
       }
