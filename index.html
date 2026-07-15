@@ -907,7 +907,7 @@
   // 실드 돔 반경 — 패들에 최대한 밀착
   function shieldRadius() { return Math.max(state.paddle.w / 2 + 16, 40); }
   function fireInterval() { return state.buffs.rapid > 0 ? 5 : 11; }
-  function ballSpeed()    { return (6.2 + (state.level - 1) * 0.35) * (1 + 0.025 * diffStage()); }
+  function ballSpeed()    { return (6.2 + (state.level - 1) * 0.35) * (1 + 0.05 * diffStage()); } // 단계당 +5% (10단계 = +45%)
 
   function buildLevel() {
     state.bricks = [];
