@@ -190,7 +190,7 @@
     justify-content: center;
     gap: clamp(4px, calc(var(--uw, 100vw) * 0.015), 12px);
     pointer-events: none;
-    overflow: hidden;
+    overflow: visible;   /* 자리수 burst(scale 2.1)가 잘리지 않도록 — 폭 초과는 fitScore가 축소로 방지 */
   }
   /* 세트 아이콘 패널 — 탄창 줄 / 에너지 바 / 폭탄 줄 */
   .ammo-panel { display: flex; flex-direction: column; gap: 4px; }
@@ -917,7 +917,7 @@
       state.patternName = 'BOSS';
       const hp = 60 + state.level * 15;
       // 보스 변형 — 현재 이니셜의 킬 수로 결정 (48변형 × 10색, 색 단계마다 6% 축소)
-      const tierIdx = Math.floor(bossKills / 48) % 10;
+      const tierIdx = diffStage() % 10; // 선택 단계(수동) 또는 누적 킬 단계 — 레벨10 선택 시 10색 보스
       const bScale = 1 - tierIdx * 0.06;
       const bossW = Math.max(130, Math.round(W * 0.22 * bScale));
       state.boss = {
@@ -1401,8 +1401,14 @@
       state.shake = 16;
       addScore(500 + state.level * 50);
       state.boss = null;
-      state.mode = 'clear';
       sfx.bossDie();
+      if (state.attract) {
+        // 데모 — 기록 갱신 없이 다음 레벨로 자동 진행 (clear 대기 없음 → 소프트락 방지)
+        state.level = (state.level % 4) + 1;
+        buildLevel(); resetBall(true); state.attractWait = 40;
+        return;
+      }
+      state.mode = 'clear';
       // 보스 격파 트로피 — 12지신 하나 90도 회전 (현재 이니셜에 귀속)
       bossKills++;
       state.runKills++;
@@ -1444,7 +1450,13 @@
     state.freeze = 25;  // 히트스톱 — 게임이 잠깐 멈춰서 확실히 인지
     sfx.bombOuch();     // 퍼~엉 + 엌!
     triggerJackpot();   // 12지신 잭팟 스핀
-    if (state.attract) return; // 데모는 피해 없음 (연출만)
+    if (state.attract) {
+      // 데모 — 죽지 않되 손상 연출: 절반 → 1/4(+단총) → 복구 순환 (보고 배우게)
+      state.bombHits = (state.bombHits + 1) % 3;
+      if (state.bombHits >= 2) state.buffs.narrow = Math.max(state.buffs.narrow, 600); // 최소 크기 + 총알 1발
+      updatePaddleWidth();
+      return;
+    }
     state.bombHits++;
     if (state.bombHits === 1) {
       updatePaddleWidth();
@@ -1508,8 +1520,8 @@
     if (state.boss) return; // 보스전은 보스 격파로만 클리어
     if (state.bricks.length === 0) {
       if (state.attract) {
-        // 데모는 1~3레벨(보스 없음)만 순환하며 계속 진행
-        state.level = (state.level % 3) + 1;
+        // 데모는 1~4레벨 순환 — 4레벨(보스)도 한 번씩 등장
+        state.level = (state.level % 4) + 1;
         buildLevel();
         resetBall(true);
         state.attractWait = 40;
