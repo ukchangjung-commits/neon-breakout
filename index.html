@@ -1137,7 +1137,7 @@
     const recs = loadRecords();
     recs.push(rec);
     recs.sort((a, b) => b.score - a.score);
-    safeStore.set(REC_KEY, JSON.stringify(recs.slice(0, 20)));
+    safeStore.set(REC_KEY, JSON.stringify(recs.slice(0, 100))); // 로컬 기록도 100까지 보관·스크롤
     localTopCache = recs.slice(0, 3); // 데모 화면 TOP 3 갱신
     cloudSave(rec); // 클라우드 랭킹에도 저장 (미설정 시 무시)
   }
