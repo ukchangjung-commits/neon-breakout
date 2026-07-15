@@ -477,6 +477,7 @@
   let manualStage = null;
   let demoNL = 0; // 데모 레벨 시퀀스 인덱스
   const DEMO_LEVELS = [1, 2, 4, 3, 4]; // 데모 순환: 일반 3판 + 보스(4) 2판 — 보스 자주, 일반도 충분히
+  let demoFade = 0, demoFadeDir = 0;   // 데모 레벨 전환 페이드 (0 없음 / +1 아웃 / -1 인)
   {
     const savedStage = safeStore.get('neon-breakout-stage', null);
     if (savedStage !== null && savedStage !== 'auto') {
@@ -531,6 +532,22 @@
     buildLevel();          // 폭탄 비율·보스 색단계 등 새 단계 반영
     resetBall(true);
     state.attractWait = 30;
+  }
+  // 데모 레벨 전환 — 페이드 아웃 시작(중복 방지). 완전 암전 시 updateDemoFade가 레벨 교체 후 페이드 인
+  function demoBeginTransition() { if (demoFadeDir === 0) demoFadeDir = 1; }
+  function updateDemoFade() {
+    if (demoFadeDir === 1) {                       // 아웃 — 어두워짐
+      demoFade = Math.min(1, demoFade + 0.09);
+      if (demoFade >= 1) {                         // 암전 → 레벨 교체
+        demoNL = (demoNL + 1) % DEMO_LEVELS.length;
+        state.level = DEMO_LEVELS[demoNL];
+        buildLevel(); resetBall(true); state.attractWait = 40;
+        demoFadeDir = -1;                          // 페이드 인 시작
+      }
+    } else if (demoFadeDir === -1) {               // 인 — 밝아짐
+      demoFade = Math.max(0, demoFade - 0.09);
+      if (demoFade <= 0) demoFadeDir = 0;
+    }
   }
   // 폭탄 비율: (자동) 첫 보스 전 40%, 이후 60% + 단계당 2%p (최대 78%)
   function hazardRatio() {
@@ -1414,10 +1431,8 @@
       state.boss = null;
       sfx.bossDie();
       if (state.attract) {
-        // 데모 — 보스 격파 후 다음 레벨로 (일반/보스 시퀀스 순환, 소프트락 방지)
-        demoNL = (demoNL + 1) % DEMO_LEVELS.length;
-        state.level = DEMO_LEVELS[demoNL];
-        buildLevel(); resetBall(true); state.attractWait = 40;
+        // 데모 — 보스 격파 후 페이드 전환 (소프트락 방지, updateDemoFade가 교체)
+        demoBeginTransition();
         return;
       }
       state.mode = 'clear';
@@ -1533,12 +1548,8 @@
     if (state.boss) return; // 보스전은 보스 격파로만 클리어
     if (state.bricks.length === 0) {
       if (state.attract) {
-        // 데모 — 다음 레벨로 (일반/보스 시퀀스 순환)
-        demoNL = (demoNL + 1) % DEMO_LEVELS.length;
-        state.level = DEMO_LEVELS[demoNL];
-        buildLevel();
-        resetBall(true);
-        state.attractWait = 40;
+        // 데모 — 페이드 아웃→레벨 교체→페이드 인 (updateDemoFade가 처리)
+        demoBeginTransition();
         return;
       }
       state.mode = 'clear';
@@ -1570,6 +1581,7 @@
 
     // 데모 AI — 완급: 초보(비틀비틀) → 프로(칼컨트롤) → 잭팟(축제)
     if (state.attract) {
+      updateDemoFade(); // 레벨 전환 페이드(아웃→교체→인) 진행
       // 교육용 — 가끔 하트를 떨궈 '하트 먹기(목숨 +1)'도 보여줌
       if (state.tick % 600 === 200) {
         // 분홍(목숨+1)·파랑(실드 7초) 번갈아 스폰 — 둘 다 자주 보여줌
@@ -3065,6 +3077,7 @@
     const alpha = Math.min(1, _acc / STEP_MS);
     interpEnter(alpha);
     try { draw(); } finally { interpExit(); } // 예외가 나도 물리 좌표는 반드시 복원
+    if (state.attract && demoFade > 0) { ctx.save(); ctx.globalAlpha = demoFade; ctx.fillStyle = '#050810'; ctx.fillRect(0, 0, W, H); ctx.restore(); } // 데모 레벨 전환 페이드(데모에서만)
     updateZodiac();
     updateScoreDisplay();
     updateAmmoPanel();
@@ -3098,6 +3111,7 @@
     simMenu = false;
     attractPhaseStart = state.tick;
     attractPhase = 'novice';
+    demoFade = 0; demoFadeDir = 0; // 레벨 전환 페이드 초기화
     state.score = 0; state.lives = 5; state.deaths = 0; state.level = 1;
     state.energy = state.energyMax;
     state.ammo = { rapid: 0, bomb: 0 };
