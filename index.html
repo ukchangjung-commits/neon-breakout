@@ -899,11 +899,11 @@
     patternName: '',
   };
 
-  // 시뮬레이션 완급 — 초보 5초 → 프로 5초 → 잭팟 10초 순환 (20초 = 1200프레임)
+  // 시뮬레이션 완급 — 초보 10초 → 프로 5초 → 잭팟 5초 순환 (20초 = 1200틱, 60Hz)
   let attractPhaseStart = 0, attractPhase = 'novice';
   function getAttractPhase() {
     const t = (state.tick - attractPhaseStart) % 1200;
-    return t < 300 ? 'novice' : t < 600 ? 'pro' : 'jackpot';
+    return t < 600 ? 'novice' : t < 900 ? 'pro' : 'jackpot';
   }
 
   function shotCost()     { return state.buffs.rapid > 0 ? 7 : 14; }
