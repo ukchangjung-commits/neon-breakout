@@ -2743,7 +2743,7 @@
       ctx.restore();
       ctx.shadowBlur = 0;
       // START / 기록 보기 버튼 (마우스 클릭 가능, Space로도 시작)
-      drawUiButton(startBtnRect(), '▶ START (Space)', '#22e6ff');
+      drawUiButton(startBtnRect(), '▶ START', '#22e6ff');
       drawUiButton(recordsBtnRect(), '🏆 기록 보기', '#ffc233');
 
       // 난이도 단계 선택 (1~10 라운드 사각형) — 안내 문구는 박스 아래(아이템 제목 자리)로 이동
@@ -3224,7 +3224,7 @@
         safeStore.set('neon-breakout-stage', manualStage === null ? 'auto' : manualStage);
         return;
       }
-      requestLock(); startRealGame(); return;
+      return; // 빈 곳 클릭으로는 시작 안 함 — START 버튼 / Enter·N 키로만 시작
     }
     if (state.mode === 'entry') { // 이니셜 화면 — 릴 드래그 + 버튼 3개
       touchEntryTimer(); // 동작 → 20초로 리셋
@@ -3293,7 +3293,7 @@
         safeStore.set('neon-breakout-stage', manualStage === null ? 'auto' : manualStage);
         return;
       }
-      startRealGame(); return;
+      return; // 빈 곳 탭으로는 시작 안 함 — START 버튼으로만 시작
     }
     if (state.mode === 'entry') { // 터치 — 릴 드래그 + 버튼 3개
       touchEntryTimer(); // 동작 → 20초로 리셋
