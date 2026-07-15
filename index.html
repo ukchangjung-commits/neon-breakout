@@ -1315,11 +1315,20 @@
     sfx.item();
   }
 
+  // 난이도 상승 스케일 — 단계 오를수록 아이템·폭탄레이저(B)·고속연사(R) 감소. 취소: false로 (또는 git revert)
+  const DIFF_SCALE = true;
+  function itemW(t) { // 단계별 가중치: B 15→3, R 20→5, 나머지 고정
+    if (!DIFF_SCALE) return t.weight;
+    const s = diffStage();
+    if (t.key === 'bomb')  return Math.max(3, Math.round(15 - 1.3 * s));
+    if (t.key === 'rapid') return Math.max(5, Math.round(20 - 1.7 * s));
+    return t.weight;
+  }
   function pickItemType() {
-    const total = ITEM_TYPES.reduce((s, t) => s + t.weight, 0);
+    const total = ITEM_TYPES.reduce((s, t) => s + itemW(t), 0);
     let roll = Math.random() * total;
     for (const t of ITEM_TYPES) {
-      roll -= t.weight;
+      roll -= itemW(t);
       if (roll <= 0) return t;
     }
     return ITEM_TYPES[0];
@@ -1367,7 +1376,10 @@
       return;
     }
     if (Math.random() > dropRate()) return;
-    spawnDrop(cx, cy, false);
+    // 위험 폭탄은 현행 유지 / 도움 아이템은 단계 오를수록 더 귀하게 (고단계일수록 생략)
+    if (Math.random() < hazardRatio()) { spawnDrop(cx, cy, true); return; }
+    if (DIFF_SCALE && Math.random() < 0.055 * diffStage()) return; // 아이템 생략률 단계당 5.5%p (10단계 ~50%)
+    state.drops.push({ x: cx, y: cy, vy: 2.0, hazard: false, type: pickItemType() });
   }
 
   function showToast(text, color) {
