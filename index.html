@@ -338,7 +338,7 @@
     폭탄 피격: <b>1회 = 패들 1/2</b> → <b>2회 = 1/4 + <span style="color:#ff5555">빨간 경고</span></b> → <b style="color:#ff5555">3회 = 목숨 -1</b> (목숨을 잃으면 패들 복구)<br>
     손상 상태에서 <span style="color:#2effc8">W</span>를 먹으면 확장 대신 <b>한 단계 수리</b> · 1/4 손상 + <span style="color:#ff9a3d">S</span> 축소가 겹치면 <b>총알이 1발</b>만 나감<br>
     CI가 번쩍이면 하트 낙하 — <span style="color:#ff5577">♥ 분홍 = 목숨 +1 (30000점마다)</span> ·
-    <span style="color:#3fa9ff">♥ 파랑 = 실드 15초 (1단계 10000점 → 10단계 30만점, 고난도일수록 희귀)</span>
+    <span style="color:#3fa9ff">♥ 파랑 = 실드 7초 (1단계 10000점 → 10단계 30만점, 고난도일수록 희귀)</span>
     — 실드: 폭탄 파괴 · 공 난반사 · 아이템/총알 통과<br>
     아이템: <span style="color:#ffc233">Q</span> 4줄레이저 ·
     <span style="color:#22e6ff">R</span> 고속연사 ·
@@ -775,6 +775,8 @@
   }
 
   function shotCost()     { return state.buffs.rapid > 0 ? 7 : 14; }
+  // 실드 돔 반경 — 패들에 최대한 밀착
+  function shieldRadius() { return Math.max(state.paddle.w / 2 + 16, 40); }
   function fireInterval() { return state.buffs.rapid > 0 ? 5 : 11; }
   function ballSpeed()    { return (6.2 + (state.level - 1) * 0.35) * (1 + 0.025 * diffStage()); }
 
@@ -1614,7 +1616,7 @@
       // 프로토스 실드 — 폭탄은 보호막에 닿으면 파괴 (+15점), 아이템·하트는 통과
       if (state.shield > 0 && d.hazard) {
         const scx = p.x + p.w / 2, scy = H - 28;
-        const R = Math.max(p.w * 0.8, 100);
+        const R = shieldRadius();
         if (d.y < scy && Math.hypot(d.x - scx, d.y - scy) < R + 10) {
           spawnParticles(d.x, d.y, '#3fa9ff', 20, 1.6);
           addScore(15);
@@ -1629,11 +1631,11 @@
         if (d.heart) { // 하트 — 분홍: 목숨 +1 / 파랑: 프로토스 실드 15초
           state.drops.splice(i, 1);
           if (d.blue) {
-            state.shield = 900;
+            state.shield = 420; // 7초
             state.shieldFlash = 10;
             sfx.shieldOn();
             spawnParticles(d.x, H - 40, '#3fa9ff', 26, 1.8);
-            showToast('🛡 프로토스 실드! 15초', '#3fa9ff');
+            showToast('🛡 프로토스 실드! 7초', '#3fa9ff');
           } else {
             state.lives++;
             updateHud();
@@ -1664,7 +1666,7 @@
       // 프로토스 실드 — 공(퍽)은 돔에서 난반사
       if (state.shield > 0) {
         const scx = p.x + p.w / 2, scy = H - 28;
-        const R = Math.max(p.w * 0.8, 100);
+        const R = shieldRadius();
         const dxs = b.x - scx, dys = b.y - scy;
         const dist = Math.hypot(dxs, dys);
         if (b.y < scy && dist < R + b.r && (b.vx * dxs + b.vy * dys) < 0) {
@@ -2138,25 +2140,31 @@
     }
     ctx.shadowBlur = 0;
 
-    // 프로토스 실드 — 패들을 감싸는 반원 보호막 (일렁이는 파란 글로우)
+    // 프로토스 실드 — 패들 밀착 반원, 위는 진하고 아래로 갈수록 투명
     if (state.shield > 0) {
       const scx = p.x + p.w / 2, scy = H - 28;
-      const R = Math.max(p.w * 0.8, 100);
+      const R = shieldRadius();
       const shimmer = 0.45 + 0.25 * Math.sin(state.tick * 0.15);
       const flash = state.shieldFlash > 0 ? state.shieldFlash / 10 : 0;
-      const expiring = state.shield < 180 && state.tick % 20 < 8; // 만료 3초 전 깜빡 경고
+      const expiring = state.shield < 120 && state.tick % 20 < 8; // 만료 2초 전 깜빡 경고
+      // 세로 그라데이션 — 꼭대기 100% → 바닥 0%
+      const rgb = flash > 0 ? '207,234,255' : '63,169,255';
+      const sg = ctx.createLinearGradient(0, scy - R, 0, scy);
+      sg.addColorStop(0, 'rgba(' + rgb + ',1)');
+      sg.addColorStop(0.65, 'rgba(' + rgb + ',0.45)');
+      sg.addColorStop(1, 'rgba(' + rgb + ',0)');
       ctx.save();
       ctx.globalAlpha = expiring ? 0.22 : Math.min(1, shimmer + flash * 0.55);
-      ctx.strokeStyle = flash > 0 ? '#cfeaff' : '#3fa9ff';
+      ctx.strokeStyle = sg;
       ctx.lineWidth = 4 + flash * 5;
       ctx.shadowColor = '#3fa9ff';
-      ctx.shadowBlur = 26 + flash * 22;
+      ctx.shadowBlur = 22 + flash * 20;
       ctx.beginPath();
       ctx.arc(scx, scy, R, Math.PI, Math.PI * 2);
       ctx.stroke();
-      // 내부 은은한 에너지 충전 빛
+      // 내부 은은한 에너지 충전 빛 (같은 그라데이션)
       ctx.globalAlpha *= 0.22;
-      ctx.fillStyle = '#3fa9ff';
+      ctx.fillStyle = sg;
       ctx.beginPath();
       ctx.arc(scx, scy, R, Math.PI, Math.PI * 2);
       ctx.fill();
