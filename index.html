@@ -539,8 +539,8 @@
   function demoBeginTransition() { if (demoFadeDir === 0) { demoFadeDir = 1; demoFadeAction = 'level'; } }
   function demoBeginRestart() { demoFadeDir = 1; demoFadeAction = 'restart'; } // 20초 데모 종료 — 진행 중 페이드도 덮어씀
   function updateDemoFade() {
-    if (demoFadeDir === 1) {                       // 아웃 — 어두워짐 (~1초, 60Hz=60스텝)
-      demoFade = Math.min(1, demoFade + 1 / 60);
+    if (demoFadeDir === 1) {                       // 아웃 — 어두워짐 (~2초, 60Hz=120스텝)
+      demoFade = Math.min(1, demoFade + 1 / 120);
       if (demoFade >= 1) {                         // 암전 순간 — 항상 다음 레벨로 (다양한 판 + 보스 등장)
         demoNL = (demoNL + 1) % DEMO_LEVELS.length;
         state.level = DEMO_LEVELS[demoNL];
@@ -1370,8 +1370,11 @@
       return;
     }
     if (type.key === 'multi') {
-      if (state.attract && demoMultiCount >= 2) return; // 데모: 레벨당 멀티볼 1~2회만
-      if (state.attract) demoMultiCount++;
+      if (state.attract) {
+        if (getAttractPhase() === 'novice') return; // 초보 데모엔 멀티볼 금지
+        if (demoMultiCount >= 2) return;             // 그 외 단계: 레벨당 1~2회만
+        demoMultiCount++;
+      }
       splitBalls();
       showToast('멀티볼! x' + state.balls.length, type.color);
       return;
@@ -1663,15 +1666,14 @@
 
       if (state.mode === 'play') {
         // 발사 — 초보: 가끔(규칙) / 프로: 많이(점수) / 잭팟: 폭풍
-        const fireRate = phase === 'novice' ? 0.05 : phase === 'pro' ? 0.22 : 0.4;
+        const fireRate = phase === 'novice' ? 0.05 : phase === 'pro' ? 0.25 : 0.9;
         if (state.energy > 30 && Math.random() < fireRate) tryShoot();
 
         // 단계별 시연 아이템 — AI가 먹어서 효과를 보여줌(강제 변경 없음)
         const rx = () => 60 + Math.random() * (W - 120);
         if (phase === 'novice') {
-          // 초보 — 패들 크기 변화(W 성장, 폭탄 축소는 자연 낙하) · 멀티볼 · 4줄 레이저, 차분히
+          // 초보 — 패들 크기 변화(W 성장, 폭탄 축소는 자연 낙하) · 4줄 레이저 (멀티볼 금지), 차분히
           if (state.tick % 180 === 0) spawnItem(rx(), 90, 'wide');
-          if (state.tick % 300 === 0) spawnItem(rx(), 90, 'multi');
           if (state.tick % 220 === 0) spawnItem(rx(), 90, 'quad');
         } else if (phase === 'pro') {
           // 프로 — 폭탄 레이저 + 간혹 고속 연사, 먹은 세트도 발동
@@ -1680,8 +1682,13 @@
           if (state.tick % 150 === 0 && state.ammo.rapid > 0) useAmmoSet('rapid');
           if (state.tick % 200 === 0 && state.ammo.bomb > 0) useAmmoSet('bomb');
         } else {
-          // 잭팟 — 최대 화력: 폭탄·고속연사·4줄 전부 화끈하게 + 폭죽·색종이 축제
-          if (state.tick % 38 === 0) spawnItem(rx(), 90, ['bomb', 'rapid', 'quad'][Math.floor(state.tick / 38) % 3]);
+          // 잭팟 — 최대 화력: 아이템 폭포수(폭탄·연사·4줄 + 멀티볼) 먹고 5초 안에 다 부수기 + 폭죽·색종이
+          if (state.tick % 14 === 0) {
+            const kinds = ['bomb', 'rapid', 'quad'];
+            spawnItem(rx(), 90, kinds[Math.floor(state.tick / 14) % 3]);
+            spawnItem(rx(), 90, kinds[(Math.floor(state.tick / 14) + 1) % 3]);
+          }
+          if (state.tick % 150 === 0) spawnItem(rx(), 90, 'multi'); // 멀티볼도 (레벨당 상한 내)
           if (state.tick % 48 === 0) {
             for (let i = 0; i < 2; i++) {
               state.fireworks.push({
