@@ -1343,14 +1343,21 @@
     if (state.attract) {
       // 데모(교육) — 깨진 벽돌 '그 자리'에서 단계별 아이템·폭탄이 나옴 (인과관계로 학습)
       const ph = getAttractPhase();
+      const t = (state.tick - attractPhaseStart) % 1200;
       if (ph === 'jackpot') {
-        // 최대 화력 — 벽돌 하나에서 좋은 아이템 여러 개 (폭탄·연사·4줄, 가끔 멀티볼)
+        // 최대 화력 — 벽돌 하나에서 좋은 아이템 왕창 (폭탄레이저·연사·4줄, 가끔 멀티볼)
         const kinds = ['bomb', 'rapid', 'quad', 'bomb', 'rapid', 'quad', 'multi'];
-        const n = 1 + Math.floor(Math.random() * 3); // 1~3개
+        const n = 2 + Math.floor(Math.random() * 3); // 2~4개
         for (let i = 0; i < n; i++) spawnItem(cx + (Math.random() * 46 - 23), cy, kinds[Math.floor(Math.random() * kinds.length)]);
         return;
       }
-      if (Math.random() > 0.45) return; // 초보·프로는 가끔만 (차분)
+      if (ph === 'pro' && t >= 780) {
+        // 프로 끝부분(~마지막 2초) — 폭탄 러시 (잭팟 직전 난이도 급상승 시연)
+        const n = 1 + Math.floor(Math.random() * 2); // 1~2개
+        for (let i = 0; i < n; i++) spawnDrop(cx + (Math.random() * 40 - 20), cy, true);
+        return;
+      }
+      if (Math.random() > 0.45) return; // 초보·프로 초반은 가끔만 (차분)
       if (ph === 'novice') {
         const r = Math.random();
         if (r < 0.4) spawnItem(cx, cy, 'wide');        // 패들 성장
