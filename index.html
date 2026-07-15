@@ -338,7 +338,7 @@
     폭탄 피격: <b>1회 = 패들 1/2</b> → <b>2회 = 1/4 + <span style="color:#ff5555">빨간 경고</span></b> → <b style="color:#ff5555">3회 = 목숨 -1</b> (목숨을 잃으면 패들 복구)<br>
     손상 상태에서 <span style="color:#2effc8">W</span>를 먹으면 확장 대신 <b>한 단계 수리</b> · 1/4 손상 + <span style="color:#ff9a3d">S</span> 축소가 겹치면 <b>총알이 1발</b>만 나감<br>
     CI가 번쩍이면 하트 낙하 — <span style="color:#ff5577">♥ 분홍 = 목숨 +1 (30000점마다)</span> ·
-    <span style="color:#3fa9ff">♥ 파랑 = 실드 15초 (1단계 10000점 → 10단계 100만점, 고난도일수록 희귀)</span>
+    <span style="color:#3fa9ff">♥ 파랑 = 실드 15초 (1단계 10000점 → 10단계 30만점, 고난도일수록 희귀)</span>
     — 실드: 폭탄 파괴 · 공 난반사 · 아이템/총알 통과<br>
     아이템: <span style="color:#ffc233">Q</span> 4줄레이저 ·
     <span style="color:#22e6ff">R</span> 고속연사 ·
@@ -436,8 +436,8 @@
     if (manualStage === null && bossKills === 0) return 0.25;
     return Math.min(0.65, 0.45 + 0.02 * diffStage());
   }
-  // 파란 하트(실드) 등장 간격 — 단계마다 ~1.67배씩, 10단계 = 100만 점 (사실상 희귀)
-  const BLUE_HEART_STEP = [10000, 20000, 30000, 50000, 80000, 130000, 220000, 360000, 600000, 1000000];
+  // 파란 하트(실드) 등장 간격 — 단계마다 ~1.46배씩, 10단계 = 30만 점
+  const BLUE_HEART_STEP = [10000, 15000, 21000, 30000, 45000, 65000, 95000, 140000, 200000, 300000];
   // 이니셜 입력 시 — 이번 판 킬을 그 이니셜에게 귀속하고 진행 상태 이어받기
   function assignPlayerKills(name) {
     if (name !== currentPlayer) {
