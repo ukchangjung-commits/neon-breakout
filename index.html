@@ -365,8 +365,8 @@
     폭탄 피격: <b>1회 = 패들 1/2</b> → <b>2회 = 1/4 + <span style="color:#ff5555">빨간 경고</span></b> → <b style="color:#ff5555">3회 = 목숨 -1</b> (목숨을 잃으면 패들 복구)<br>
     손상 상태에서 <span style="color:#2effc8">W</span>를 먹으면 확장 대신 <b>한 단계 수리</b> · 1/4 손상 + <span style="color:#ff9a3d">S</span> 축소가 겹치면 <b>총알이 1발</b>만 나감<br>
     CI가 번쩍이면 하트 낙하 — <span style="color:#ff5577">♥ 분홍 = 목숨 +1 (30000점마다)</span> ·
-    <span style="color:#3fa9ff">♥ 파랑 = 실드 7초 (1단계 10000점 → 10단계 30만점, 고난도일수록 희귀)</span>
-    — 실드: 폭탄 파괴 · 공 난반사 · 아이템/총알 통과<br>
+    <span style="color:#3fa9ff">♥ 파랑 = 보호막 7초 (1단계 10000점 → 10단계 30만점, 고난도일수록 희귀)</span>
+    — 보호막: 폭탄 파괴 · 공 난반사 · 아이템/총알 통과<br>
     아이템: <span style="color:#ffc233">Q</span> 4줄레이저 ·
     <span style="color:#22e6ff">R</span> 고속연사 ·
     <span style="color:#ff3df0">B</span> 폭탄레이저 ·
@@ -1845,7 +1845,7 @@
             state.shieldFlash = 10;
             sfx.shieldOn();
             spawnParticles(d.x, H - 40, '#3fa9ff', 26, 1.8);
-            showToast('🛡 프로토스 실드! 7초', '#3fa9ff');
+            showToast('🛡 보호막! 7초', '#3fa9ff');
           } else {
             state.lives++;
             updateHud();
