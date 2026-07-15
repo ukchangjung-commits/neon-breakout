@@ -523,6 +523,13 @@
     if (manualStage !== null) return manualStage;
     return Math.min(9, Math.floor(bossKills / 48));
   }
+  // 시작화면에서 난이도(단계) 선택 시 — 현재 데모 판을 새 난이도로 즉시 재구성 (바로 적용)
+  function applyDemoStage() {
+    if (!state.attract) return;
+    buildLevel();          // 폭탄 비율·보스 색단계 등 새 단계 반영
+    resetBall(true);
+    state.attractWait = 30;
+  }
   // 폭탄 비율: (자동) 첫 보스 전 40%, 이후 60% + 단계당 2%p (최대 78%)
   function hazardRatio() {
     if (manualStage === null && bossKills === 0) return 0.40;
@@ -3248,6 +3255,7 @@
       if (si >= 0) {
         manualStage = (manualStage === si) ? null : si; // 같은 칸 재클릭 = 자동 복귀
         safeStore.set('neon-breakout-stage', manualStage === null ? 'auto' : manualStage);
+        applyDemoStage(); // 선택 즉시 현재 데모에 새 난이도 반영
         return;
       }
       return; // 빈 곳 클릭으로는 시작 안 함 — START 버튼 / Enter·N 키로만 시작
@@ -3318,6 +3326,7 @@
       if (si >= 0) {
         manualStage = (manualStage === si) ? null : si;
         safeStore.set('neon-breakout-stage', manualStage === null ? 'auto' : manualStage);
+        applyDemoStage(); // 선택 즉시 현재 데모에 새 난이도 반영
         return;
       }
       return; // 빈 곳 탭으로는 시작 안 함 — START 버튼으로만 시작
