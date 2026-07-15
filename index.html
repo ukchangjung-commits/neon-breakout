@@ -475,6 +475,17 @@
   // ---- 난이도 스케일링 — 12지신 색동 단계(보스 48마리 = 1단계)에 비례 ----
   // 시작 화면에서 1~10단계 수동 선택 가능 (null = 자동: 이니셜 진행 기반)
   let manualStage = null;
+  // 데모 패들 크기 시연 — 축소→최소(단총)→회복→확장(최대) 순환 (기존 정의 사이즈 사용)
+  let demoPadT = 0, demoPadStep = 0;
+  const DEMO_PAD_SEQ = [
+    { g: 0, h: 0, n: 0 }, // 정상
+    { g: 0, h: 1, n: 0 }, // ½ — 폭탄 피격
+    { g: 0, h: 2, n: 0 }, // ¼
+    { g: 0, h: 2, n: 1 }, // 최소 + 총알 1발
+    { g: 0, h: 1, n: 0 }, // ½ — 회복
+    { g: 0, h: 0, n: 0 }, // 정상 — 수리
+    { g: 1, h: 0, n: 0 }, // 확장(최대) — W 아이템
+  ];
   {
     const savedStage = safeStore.get('neon-breakout-stage', null);
     if (savedStage !== null && savedStage !== 'auto') {
@@ -886,6 +897,7 @@
     boss: null,
     buffs: { quad: 0, rapid: 0, bomb: 0, wide: 0, narrow: 0 },
     bombHits: 0, // 폭탄 피격 누적 — 1: 절반, 2: 빨간 경고, 3: 목숨 -1
+    grow: 0, // 패들 성장 단계 — 0: 정상, 1: 확장(W로 한 칸씩, 죽기 전까지 유지)
     ammo: { rapid: 0, bomb: 0 }, // 저장된 세트 (각 최대 5)
     burst: null, // 발동 중인 세트 { kind, shots, timer }
     attract: true, attractWait: 60, // 데모(어트랙트) 모드 — 시작 전 AI 시뮬레이션
@@ -969,7 +981,7 @@
   }
 
   function updatePaddleWidth() {
-    let w = state.buffs.wide > 0 ? PADDLE_WIDE
+    let w = state.grow >= 1 ? PADDLE_WIDE            // W 성장 = 확장(최대)
           : state.buffs.narrow > 0 ? PADDLE_NARROW
           : PADDLE_W;
     if (state.bombHits === 1) w = Math.round(w / 2);      // 1회 피격: 1/2
@@ -979,6 +991,7 @@
 
   function clearBuffs() {
     state.buffs = { quad: 0, rapid: 0, bomb: 0, wide: 0, narrow: 0 };
+    state.grow = 0;
     updatePaddleWidth();
   }
 
@@ -1336,17 +1349,17 @@
       showToast('멀티볼! x' + state.balls.length, type.color);
       return;
     }
-    // 확장(W)은 패들이 손상된 상태면 확장 대신 '한 단계 수리'로 작동
-    if (type.key === 'wide' && state.bombHits > 0) {
-      state.bombHits--;
+    // 확장(W) — 한 칸씩 크게: 손상 회복(¼→½→정상) → 정상이면 확장(최대)까지, 죽기 전까지 유지
+    if (type.key === 'wide') {
       state.buffs.narrow = 0;
+      if (state.bombHits > 0) { state.bombHits--; showToast('🔧 패들 수리! 한 단계 복구', '#2effc8'); }
+      else if (state.grow < 1) { state.grow = 1; showToast('패들 확장! (최대)', type.color); }
+      else showToast('이미 최대 크기', type.color);
       updatePaddleWidth();
-      showToast('🔧 패들 수리! 한 단계 복구', '#2effc8');
       return;
     }
     state.buffs[type.key] = BUFF_DURATION;
-    if (type.key === 'wide') state.buffs.narrow = 0;   // 확장이 축소를 해제
-    if (type.key === 'narrow') state.buffs.wide = 0;   // 축소가 확장을 해제
+    if (type.key === 'narrow') state.grow = 0;   // 축소(S)가 확장(성장)을 해제
     // 연사·폭탄은 버프와 동시에 세트로도 적립 (Space로 발동)
     if (type.key === 'rapid' || type.key === 'bomb') {
       state.ammo[type.key] = Math.min(5, state.ammo[type.key] + 1);
@@ -1455,13 +1468,7 @@
     state.freeze = 25;  // 히트스톱 — 게임이 잠깐 멈춰서 확실히 인지
     sfx.bombOuch();     // 퍼~엉 + 엌!
     triggerJackpot();   // 12지신 잭팟 스핀
-    if (state.attract) {
-      // 데모 — 죽지 않되 손상 연출: 절반 → 1/4(+단총) → 복구 순환 (보고 배우게)
-      state.bombHits = (state.bombHits + 1) % 3;
-      if (state.bombHits >= 2) state.buffs.narrow = Math.max(state.buffs.narrow, 600); // 최소 크기 + 총알 1발
-      updatePaddleWidth();
-      return;
-    }
+    if (state.attract) return; // 데모 — 피해 없음 (패들 크기 시연은 별도 순환이 담당)
     state.bombHits++;
     if (state.bombHits === 1) {
       updatePaddleWidth();
@@ -1473,7 +1480,7 @@
       state.lives--;
       state.deaths++;
       showToast('폭탄 피격! -1 ♥', '#ff5555');
-      state.bombHits = 0;  // 목숨을 잃으며 패들 새것으로 복구
+      state.bombHits = 0; state.grow = 0;  // 목숨을 잃으며 패들 새것으로 복구
       state.ammo = { rapid: 0, bomb: 0 }; // 죽으면 저장 세트도 소멸
       updatePaddleWidth();
       updateHud();
@@ -1561,6 +1568,14 @@
 
     // 데모 AI — 완급: 초보(비틀비틀) → 프로(칼컨트롤) → 잭팟(축제)
     if (state.attract) {
+      // 패들 크기 시연 — 축소→최소(단총)→회복→확장(최대) 계속 순환
+      if (++demoPadT >= 72) {
+        demoPadT = 0;
+        demoPadStep = (demoPadStep + 1) % DEMO_PAD_SEQ.length;
+        const ps = DEMO_PAD_SEQ[demoPadStep];
+        state.bombHits = ps.h; state.grow = ps.g; state.buffs.narrow = ps.n ? 600 : 0;
+        updatePaddleWidth();
+      }
       const phase = getAttractPhase();
       if (phase !== attractPhase) {
         attractPhase = phase;
@@ -2299,7 +2314,7 @@
     // 패들
     const p = state.paddle;
     ctx.fillStyle = state.bombHits >= 2 ? '#ff3040'      // 폭탄 2회 피격 — 빨간 경고
-                  : state.buffs.wide > 0 ? '#2effc8'
+                  : state.grow >= 1 ? '#2effc8'
                   : state.buffs.narrow > 0 ? '#ff9a3d'
                   : '#22e6ff';
     ctx.shadowColor = ctx.fillStyle;
