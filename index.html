@@ -927,11 +927,11 @@
     patternName: '',
   };
 
-  // 시뮬레이션 완급 — 초보 10초 → 프로 5초 → 잭팟 5초 순환 (20초 = 1200틱, 60Hz)
+  // 시뮬레이션 완급 — 초보 15초 → 프로 10초 → 잭팟 5초 순환 (30초 = 1800틱, 60Hz)
   let attractPhaseStart = 0, attractPhase = 'novice';
   function getAttractPhase() {
-    const t = (state.tick - attractPhaseStart) % 1200;
-    return t < 600 ? 'novice' : t < 900 ? 'pro' : 'jackpot';
+    const t = (state.tick - attractPhaseStart) % 1800;
+    return t < 900 ? 'novice' : t < 1500 ? 'pro' : 'jackpot';
   }
 
   function shotCost()     { return state.buffs.rapid > 0 ? 7 : 14; }
@@ -1344,15 +1344,15 @@
     if (state.attract) {
       // 데모(교육) — 깨진 벽돌 '그 자리'에서 단계별 아이템·폭탄이 나옴 (인과관계로 학습)
       const ph = getAttractPhase();
-      const t = (state.tick - attractPhaseStart) % 1200;
+      const t = (state.tick - attractPhaseStart) % 1800;
       if (ph === 'jackpot') {
-        // 잭팟 — 이미 무장 완료. 버프 유지용 소량만 드롭(과하지 않게), 화력은 발사율·폭죽으로
-        if (Math.random() < 0.3) spawnItem(cx, cy, ['bomb', 'rapid', 'quad'][Math.floor(Math.random() * 3)]);
+        // 잭팟 — 이미 무장 완료. 버프 유지용 소량만 드롭, 화력은 발사율·폭죽으로
+        if (Math.random() < 0.18) spawnItem(cx, cy, ['bomb', 'rapid', 'quad'][Math.floor(Math.random() * 3)]);
         return;
       }
-      if (ph === 'pro' && t >= 720) {
+      if (ph === 'pro' && t >= 1320) {
         // 프로 뒷부분 — 모든 아이템(폭탄·4줄·연사·확장·멀티볼·에너지·보호막)을 하나씩 자연스럽게 흘려 잭팟 전에 다 모으게
-        if (Math.random() < 0.5) {
+        if (Math.random() < 0.35) {
           const arsenal = ['bomb', 'quad', 'rapid', 'wide', 'multi', 'energy', 'shield'];
           const key = arsenal[proArsenalIdx++ % arsenal.length];
           if (key === 'shield') spawnHeartDrop(cx, cy, Math.random() < 0.5 ? -1 : 1, true); // 파란 하트 = 보호막
@@ -1360,7 +1360,7 @@
         }
         return;
       }
-      if (Math.random() > 0.4) return; // 초보·프로 초반은 가끔만 (차분)
+      if (Math.random() > 0.22) return; // 초보·프로 초반은 가끔만 (더 드물게, 차분)
       if (ph === 'novice') {
         const r = Math.random();
         if (r < 0.4) spawnItem(cx, cy, 'wide');        // 패들 성장
