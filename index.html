@@ -3106,24 +3106,32 @@
     step();
   }
   function loop(now) {
-    if (!now) now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-    if (!_lastT) _lastT = now;
-    let dt = now - _lastT; _lastT = now;
-    if (dt > 250) dt = 250;           // 탭 복귀 등 큰 공백 → 몰아치기 방지
-    _acc += dt;
-    let n = 0;
-    while (_acc >= STEP_MS && n < 5) { stepFixed(); _acc -= STEP_MS; n++; }
-    if (n >= 5) _acc = 0;             // 밀린 스텝은 폐기 (느린 기기 안전장치)
-    const alpha = Math.min(1, _acc / STEP_MS);
-    interpEnter(alpha);
-    try { draw(); } finally { interpExit(); } // 예외가 나도 물리 좌표는 반드시 복원
-    if (state.attract && demoFade > 0) { ctx.save(); ctx.globalAlpha = demoFade; ctx.fillStyle = '#050810'; ctx.fillRect(0, 0, W, H); ctx.restore(); } // 데모 레벨 전환 페이드(데모에서만)
-    updateZodiac();
-    updateScoreDisplay();
-    updateAmmoPanel();
-    updateEnergyBar();
-    updateChrome();
-    requestAnimationFrame(loop);
+    try {
+      if (!now) now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      if (!_lastT) _lastT = now;
+      let dt = now - _lastT; _lastT = now;
+      if (dt > 250) dt = 250;           // 탭 복귀 등 큰 공백 → 몰아치기 방지
+      _acc += dt;
+      let n = 0;
+      while (_acc >= STEP_MS && n < 5) { stepFixed(); _acc -= STEP_MS; n++; }
+      if (n >= 5) _acc = 0;             // 밀린 스텝은 폐기 (느린 기기 안전장치)
+      const alpha = Math.min(1, _acc / STEP_MS);
+      interpEnter(alpha);
+      try { draw(); } finally { interpExit(); } // 예외가 나도 물리 좌표는 반드시 복원
+      if (state.attract && demoFade > 0) { ctx.save(); ctx.globalAlpha = demoFade; ctx.fillStyle = '#050810'; ctx.fillRect(0, 0, W, H); ctx.restore(); } // 데모 레벨 전환 페이드(데모에서만)
+      updateZodiac();
+      updateScoreDisplay();
+      updateAmmoPanel();
+      updateEnergyBar();
+      updateChrome();
+    } catch (e) {
+      // 한 프레임에서 오류가 나도 루프가 죽지 않게 — 다음 프레임 계속(프리즈 원천 차단)
+      try { interpExit(); } catch (_) {}   // 보간 좌표 미복원 시 복원 시도
+      _acc = 0;                            // 밀린 시간 폐기
+      try { window.__loopErr = '' + (e && e.stack || e); } catch (_) {}
+      if (typeof console !== 'undefined' && console.error) console.error('[loop 오류]', e);
+    }
+    requestAnimationFrame(loop);          // 성공/실패와 무관하게 항상 다음 프레임 예약
   }
 
   // 데모 종료 → 진짜 게임 시작
