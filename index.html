@@ -1346,18 +1346,10 @@
       // 데모(교육) — 깨진 벽돌 '그 자리'에서 단계별 아이템·폭탄이 나옴 (인과관계로 학습)
       const ph = getAttractPhase();
       const t = (state.tick - attractPhaseStart) % 1800;
-      if (ph === 'jackpot') {
-        // 잭팟 초반 — 깨진 벽돌에서 파워업을 순서대로 내보내 완전 무장(인과). 이후엔 버프 유지용 소량
-        if (jackpotArsenal.length) spawnItem(cx, cy, jackpotArsenal.shift());
-        else if (Math.random() < 0.09) spawnItem(cx, cy, ['bomb', 'rapid', 'quad'][Math.floor(Math.random() * 3)]);
-        return;
-      }
-      if (ph === 'pro' && t >= 1320) {
-        // 프로 뒷부분 — 모든 아이템(폭탄·4줄·연사·확장·멀티볼·에너지·보호막)을 하나씩 자연스럽게 흘려 잭팟 전에 다 모으게
-        if (Math.random() < 0.175) {
-          const arsenal = ['bomb', 'quad', 'rapid', 'wide', 'multi', 'energy']; // 보호막은 프로 시작에 따로 투하
-          spawnItem(cx, cy, arsenal[proArsenalIdx++ % arsenal.length]);
-        }
+      // 프로 후반~잭팟 — 예약된 파워업 세트를 깨진 벽돌에서 순서대로 방출(낙하시간 역산 → 잭팟 시작 무렵 다 먹음)
+      if (t >= 1200) {
+        if (jackpotArsenal.length) { spawnItem(cx, cy, jackpotArsenal.shift()); return; }
+        if (ph === 'jackpot' && Math.random() < 0.09) spawnItem(cx, cy, ['bomb', 'rapid', 'quad'][Math.floor(Math.random() * 3)]); // 세트 소진 후 잭팟 유지용 소량
         return;
       }
       if (Math.random() > 0.11) return; // 초보·프로 초반은 가끔만 (절반으로 더 드물게)
@@ -1644,14 +1636,13 @@
       if (phase !== attractPhase) {
         const prevPhase = attractPhase;
         attractPhase = phase;
-        if (phase === 'pro') proArsenalIdx = 0; // 프로 뒷부분 아이템 흘리기 순서 초기화
-        if (phase === 'jackpot') {
-          confettiBlast(); triggerJackpot();
-          // 잭팟 시작 — 초반 깨지는 벽돌에서 파워업이 순서대로 나와 완전 무장(인과). 보호막은 CI에서
-          jackpotArsenal = ['wide', 'rapid', 'quad', 'bomb', 'energy', 'multi'];
+        if (phase === 'pro') {
+          // 프로 시작 — 보호막(파란 하트) CI 투하(느린 낙하로 잭팟 무렵 도착) + 잭팟 파워업 세트 예약(프로 후반 벽돌에서 방출)
           triggerCiHeartDrop(false, true);
+          jackpotArsenal = ['wide', 'rapid', 'quad', 'bomb', 'energy', 'multi'];
         }
-        if (phase === 'novice' && prevPhase === 'jackpot') demoBeginRestart(); // 20초 데모 종료 → 빠른 페이드 후 새 데모
+        if (phase === 'jackpot') { confettiBlast(); triggerJackpot(); }
+        if (phase === 'novice' && prevPhase === 'jackpot') demoBeginRestart(); // 30초 데모 종료 → 빠른 페이드 후 새 데모
       }
       // 1순위: 내려오는 공 추적 (생존)
       let target = W / 2, bestY = -1;
@@ -1663,8 +1654,7 @@
       const pCx = p.x + p.w / 2;
 
       const shieldOn = state.shield > 0;
-      // 실드(파란 하트) 켜지면 — 폭탄을 일부러 실드로 받아 무피해로 튕겨내는 장면 시연
-      if (shieldOn && state.tick % 45 === 0) spawnDrop(pCx + (Math.random() * 120 - 60), 90, true);
+      // 실드(파란 하트) 켜지면 — 자연 낙하 폭탄이 돔에 막히는 장면을 보여줌 (하늘 인위 스폰 제거: 인과 없는 생성물 금지)
 
       // 아이템·하트 주우러 — 모든 단계(초보 포함)에서 규칙 시연. 공이 급하면 생존 우선
       if (!ballUrgent) {
