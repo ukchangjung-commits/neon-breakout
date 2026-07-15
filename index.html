@@ -17,17 +17,19 @@
     margin: 0;
     background: radial-gradient(1200px 700px at 50% -10%, #101c3a 0%, var(--bg) 60%);
     color: var(--text);
-    font-family: Consolas, 'Courier New', monospace;
+    font-family: ui-monospace, Menlo, Consolas, 'Courier New', monospace;
     display: flex;
     align-items: stretch;
     justify-content: center;
     height: 100vh;
+    height: 100dvh; /* iOS Safari 주소창 보정 */
     padding: 10px;
     overflow: hidden;
   }
   .cabinet {
     width: 100%;
     height: calc(100vh - 20px);
+    height: calc(100dvh - 20px);
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -41,7 +43,7 @@
     font-weight: bold;
     line-height: 1.1;
     padding: 6px 2px 2px;
-    user-select: none;
+    -webkit-user-select: none; -moz-user-select: none; user-select: none;
   }
   .sign span { animation: neonGlow 3.2s infinite; }
   .sign .m {
@@ -122,7 +124,7 @@
     border-radius: 10px;
     background: var(--panel);
     color: var(--cyan);
-    font: bold 32px Consolas, 'Courier New', monospace;
+    font: bold 32px ui-monospace, Menlo, Consolas, 'Courier New', monospace;
     cursor: pointer;
     text-shadow: 0 0 8px rgba(34, 230, 255, 0.6);
     flex: none;
@@ -282,7 +284,12 @@
       0 0 40px rgba(34, 230, 255, 0.07),
       inset 0 0 60px rgba(0, 0, 0, 0.6);
   }
-  canvas { display: block; width: 100%; height: 100%; }
+  canvas {
+    display: block; width: 100%; height: 100%;
+    touch-action: none;            /* iOS/Android 핀치·더블탭 줌 차단 */
+    -webkit-touch-callout: none;   /* iOS 롱프레스 콜아웃 차단 */
+    -webkit-user-select: none; user-select: none;
+  }
   .screen::after {
     content: "";
     position: absolute;
@@ -298,7 +305,8 @@
   }
   @media (prefers-reduced-motion: reduce) {
     .screen::after { background: none; }
-    .sign span { animation: none; }
+    .sign span, .sign .z, .sign.jackpot .z { animation: none; }
+    .hud .score.pop, .hud .score .digit.burst, .hud .lives.lost, .hud .lives.gain { animation: none !important; }
   }
 </style>
 
@@ -313,7 +321,7 @@
     </div>
     <div class="score-wrap">
       <span class="label">SCORE</span><span class="score" id="score">0</span>
-      <span class="lives" id="lives">♥♥♥</span>
+      <span class="lives" id="lives">♥&#xFE0E;♥&#xFE0E;♥&#xFE0E;</span>
     </div>
     <div class="hud-side">
       <div class="ammo-panel" aria-hidden="true">
@@ -358,15 +366,50 @@
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
 
+  // ---- 크로스브라우저: ctx.roundRect 폴리필 (Safari<16·iOS<16·Firefox<112·Chrome<99에서 미지원→draw 크래시 방지) ----
+  if (typeof CanvasRenderingContext2D !== 'undefined' && !CanvasRenderingContext2D.prototype.roundRect) {
+    CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+      if (typeof r === 'number') r = [r, r, r, r];
+      else if (Array.isArray(r)) {
+        if (r.length === 1) r = [r[0], r[0], r[0], r[0]];
+        else if (r.length === 2) r = [r[0], r[1], r[0], r[1]];
+        else if (r.length === 3) r = [r[0], r[1], r[2], r[1]];
+      } else r = [0, 0, 0, 0];
+      const m = Math.min(Math.abs(w), Math.abs(h)) / 2;
+      const tl = Math.max(0, Math.min(r[0], m)), tr = Math.max(0, Math.min(r[1], m));
+      const br = Math.max(0, Math.min(r[2], m)), bl = Math.max(0, Math.min(r[3], m));
+      this.moveTo(x + tl, y);
+      this.lineTo(x + w - tr, y); this.arcTo(x + w, y, x + w, y + tr, tr);
+      this.lineTo(x + w, y + h - br); this.arcTo(x + w, y + h, x + w - br, y + h, br);
+      this.lineTo(x + bl, y + h); this.arcTo(x, y + h, x, y + h - bl, bl);
+      this.lineTo(x, y + tl); this.arcTo(x, y, x + tl, y, tl);
+      this.closePath(); return this;
+    };
+  }
+
+  // ---- 크로스브라우저: localStorage 안전 래퍼 (프라이빗·저장차단·샌드박스에서 예외 흡수) ----
+  const safeStore = {
+    get(key, fallback) { try { const v = localStorage.getItem(key); return v === null ? fallback : v; } catch (e) { return fallback; } },
+    set(key, val) { try { localStorage.setItem(key, String(val)); } catch (e) {} },
+    remove(key) { try { localStorage.removeItem(key); } catch (e) {} },
+    getJSON(key, fallback) { try { const v = localStorage.getItem(key); return v === null ? fallback : (JSON.parse(v) || fallback); } catch (e) { return fallback; } },
+  };
+
   // 화면 비율에 맞춰 내부 해상도 결정 — 풀 HD 등 와이드 화면에 꽉 참
-  (function fitCanvas() {
+  function fitCanvas() {
     const box = canvas.parentElement.getBoundingClientRect();
     if (box.width > 0 && box.height > 0) {
       canvas.height = 900;
       canvas.width = Math.round(Math.min(2400, Math.max(600, 900 * (box.width / box.height))));
     }
-  })();
-  const W = canvas.width, H = canvas.height;
+  }
+  fitCanvas();
+  let W = canvas.width, H = canvas.height;
+  // 창 크기 변경·모바일 화면 회전 시 내부 해상도 재계산 (세로↔가로 왜곡 방지)
+  let _resizeT;
+  function refit() { fitCanvas(); W = canvas.width; H = canvas.height; }
+  window.addEventListener('resize', () => { clearTimeout(_resizeT); _resizeT = setTimeout(refit, 150); });
+  window.addEventListener('orientationchange', () => setTimeout(refit, 300));
 
   const scoreEl = document.getElementById('score');
   const bestEl = document.getElementById('best');
@@ -374,34 +417,33 @@
   const livesEl = document.getElementById('lives');
 
   const BEST_KEY = 'neon-breakout-best';
-  let best = Number(localStorage.getItem(BEST_KEY) || 0);
+  let best = Number(safeStore.get(BEST_KEY, 0)) || 0;
   bestEl.textContent = best;
 
   // 보스 격파 트로피 — 12지신 × 4회전(48) × 저항 색띠 10색 = 480마리
   // 이니셜별로 저장 — 같은 이니셜을 입력하면 12지신 진행 상태를 이어서 함
   const BOSSMAP_KEY = 'neon-breakout-bossmap';
   const PLAYER_KEY = 'neon-breakout-player';
-  let bossMap = {};
-  try { bossMap = JSON.parse(localStorage.getItem(BOSSMAP_KEY)) || {}; } catch (e) {}
-  let currentPlayer = localStorage.getItem(PLAYER_KEY) || '???';
+  let bossMap = safeStore.getJSON(BOSSMAP_KEY, {});
+  let currentPlayer = safeStore.get(PLAYER_KEY, '???');
   // 구버전 전역 카운트 → 현재 플레이어로 1회 이전
-  const legacyKills = Number(localStorage.getItem('neon-breakout-bosskills') || 0);
+  const legacyKills = Number(safeStore.get('neon-breakout-bosskills', 0)) || 0;
   if (legacyKills > 0 && !(currentPlayer in bossMap)) {
     bossMap[currentPlayer] = legacyKills;
-    localStorage.removeItem('neon-breakout-bosskills');
-    localStorage.setItem(BOSSMAP_KEY, JSON.stringify(bossMap));
+    safeStore.remove('neon-breakout-bosskills');
+    safeStore.set(BOSSMAP_KEY, JSON.stringify(bossMap));
   }
   let bossKills = bossMap[currentPlayer] || 0;
   function saveBossMap() {
     bossMap[currentPlayer] = bossKills;
-    localStorage.setItem(BOSSMAP_KEY, JSON.stringify(bossMap));
+    safeStore.set(BOSSMAP_KEY, JSON.stringify(bossMap));
   }
 
   // ---- 난이도 스케일링 — 12지신 색동 단계(보스 48마리 = 1단계)에 비례 ----
   // 시작 화면에서 1~10단계 수동 선택 가능 (null = 자동: 이니셜 진행 기반)
   let manualStage = null;
   {
-    const savedStage = localStorage.getItem('neon-breakout-stage');
+    const savedStage = safeStore.get('neon-breakout-stage', null);
     if (savedStage !== null && savedStage !== 'auto') {
       manualStage = Math.max(0, Math.min(9, Number(savedStage) || 0));
     }
@@ -443,7 +485,7 @@
     if (name !== currentPlayer) {
       bossMap[currentPlayer] = Math.max(0, (bossMap[currentPlayer] || 0) - state.runKills);
       currentPlayer = name;
-      localStorage.setItem(PLAYER_KEY, name);
+      safeStore.set(PLAYER_KEY, name);
       bossKills = (bossMap[name] || 0) + state.runKills;
       saveBossMap();
       applyBossTrophies();
@@ -504,20 +546,32 @@
         masterGain = audio.createGain();
         masterGain.gain.value = muted ? 0 : 1;
         masterGain.connect(audio.destination);
+        // iOS: 전화·앱전환·잠금으로 'interrupted' 되면 자동 복구 (WebKit 고유 상태)
+        if (audio.addEventListener) audio.addEventListener('statechange', () => {
+          if (audio && (audio.state === 'interrupted' || audio.state === 'suspended')) {
+            const p = audio.resume && audio.resume();
+            if (p && p.catch) p.catch(() => {});
+          }
+        });
         startMusic();
       } catch (e) { audio = false; }
     }
-    if (audio && audio.state === 'suspended') audio.resume();
+    if (audio && audio.state !== 'running') { // 'suspended' + iOS 'interrupted' 모두 커버
+      const p = audio.resume && audio.resume(); // 구형: resume 미존재 방어
+      if (p && p.catch) p.catch(() => {});      // resume Promise reject 방어
+    }
   }
   // 지정 시각(t)에 음 하나 예약
   function tone(freq, t, dur, type, vol, slide) {
     if (!audio || !freq) return;
+    t = Math.max(t, audio.currentTime);  // 과거 시각 예약 방지 (백그라운드 복귀 시)
+    const v = vol > 0 ? vol : 0.05;       // 명시적 0/음수 → exp 램프 예외 방지
     const osc = audio.createOscillator();
     const gain = audio.createGain();
     osc.type = type || 'square';
     osc.frequency.setValueAtTime(freq, t);
     if (slide) osc.frequency.exponentialRampToValueAtTime(Math.max(40, freq + slide), t + dur);
-    gain.gain.setValueAtTime(vol || 0.05, t);
+    gain.gain.setValueAtTime(v, t);
     gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     osc.connect(gain).connect(masterGain);
     osc.start(t);
@@ -563,8 +617,10 @@
   const D_STAB = [[523, 659], [494, 587], [440, 523], [523, 698]]; // 스트링 스탭 화음
   let bgmStarted = false, bgmStep = 0, bgmNextTime = 0;
   function scheduleMusic() {
-    if (!audio || muted) return;
-    while (bgmNextTime < audio.currentTime + 0.2) {
+    if (!audio || muted || audio.state !== 'running') return;
+    if (bgmNextTime < audio.currentTime) bgmNextTime = audio.currentTime + 0.05; // 밀렸으면 현재로 스냅
+    let _g = 0;
+    while (bgmNextTime < audio.currentTime + 0.2 && _g++ < 64) {
       const st = bgmStep % 32;
       const t = bgmNextTime;
       if (D_BASS[st]) tone(D_BASS[st], t, 0.13, 'triangle', 0.06);           // 펑키 베이스
@@ -591,6 +647,16 @@
     bgmNextTime = audio.currentTime + 0.1;
     setInterval(scheduleMusic, 80); // 미리 예약하는 룩어헤드 스케줄러
   }
+  // 백그라운드 탭 → 컨텍스트 정지, 복귀 → 재개 + 밀린 스텝 폐기(몰아치기 굉음 방지)
+  document.addEventListener('visibilitychange', () => {
+    if (!audio) return;
+    if (document.hidden) {
+      if (audio.suspend) audio.suspend();
+    } else {
+      if (audio.state !== 'running') { const p = audio.resume && audio.resume(); if (p && p.catch) p.catch(() => {}); }
+      bgmNextTime = audio.currentTime + 0.1;
+    }
+  });
   const sfx = {
     // 따발총 — 발마다 피치가 달라지는 '타타타' + 총구 타격 노이즈
     shoot:  () => {
@@ -969,7 +1035,7 @@
     levelEl.textContent = isBossLevel(state.level) ? state.level + ' BOSS' : state.level;
     // 빈 하트(죽은 횟수)는 왼쪽부터, 보너스 하트는 오른쪽으로 계속 쌓임
     // 한 줄(8개)이 넘으면 두 줄로 감싸고, 두 줄(16개)도 넘치면 그때만 축소
-    livesEl.textContent = '♡'.repeat(state.deaths) + '♥'.repeat(Math.max(0, state.lives));
+    livesEl.textContent = '♡︎'.repeat(state.deaths) + '♥︎'.repeat(Math.max(0, state.lives));
     const totalHearts = Math.max(1, state.lives + state.deaths);
     livesEl.style.fontSize = (totalHearts <= 16 ? 30 : Math.max(12, Math.floor(30 * 16 / totalHearts))) + 'px';
   }
@@ -981,7 +1047,7 @@
     state.score += n;
     if (state.score > best) {
       best = state.score;
-      localStorage.setItem(BEST_KEY, best);
+      safeStore.set(BEST_KEY, best);
     }
     // 200점 단위 돌파 → 축포!
     const crossed = Math.floor(state.score / 200) - Math.floor(before / 200);
@@ -1041,7 +1107,7 @@
   // ---- 게임 기록 ----
   const REC_KEY = 'neon-breakout-records';
   function loadRecords() {
-    try { return JSON.parse(localStorage.getItem(REC_KEY)) || []; } catch (e) { return []; }
+    return safeStore.getJSON(REC_KEY, []);
   }
   function saveRecord(name) {
     const rec = {
@@ -1054,7 +1120,7 @@
     const recs = loadRecords();
     recs.push(rec);
     recs.sort((a, b) => b.score - a.score);
-    localStorage.setItem(REC_KEY, JSON.stringify(recs.slice(0, 20)));
+    safeStore.set(REC_KEY, JSON.stringify(recs.slice(0, 20)));
     localTopCache = recs.slice(0, 3); // 데모 화면 TOP 3 갱신
     cloudSave(rec); // 클라우드 랭킹에도 저장 (미설정 시 무시)
   }
@@ -1106,7 +1172,8 @@
     state.dyingT = 180;
     state.entryName = '';
     initEntryReels();
-    if (document.exitPointerLock) document.exitPointerLock(); // 입력 화면에선 커서 표시
+    const _exitLock = document.exitPointerLock || document.webkitExitPointerLock || document.mozExitPointerLock;
+    if (_exitLock) _exitLock.call(document); // 입력 화면에선 커서 표시
     state.shake = 18;
     // 패들 대폭발
     spawnParticles(state.paddle.x + state.paddle.w / 2, H - 34, '#22e6ff', 50, 3);
@@ -1768,7 +1835,7 @@
     ctx.stroke();
     ctx.shadowBlur = 0;
     ctx.fillStyle = color;
-    ctx.font = 'bold 17px Consolas, monospace';
+    ctx.font = 'bold 17px Menlo, Consolas, monospace';
     ctx.textAlign = 'center';
     ctx.fillText(label, r.x + r.w / 2, r.y + r.h / 2 + 6);
   }
@@ -1905,7 +1972,7 @@
     ctx.fillRect(bx, by, bw * Math.max(0, hpRatio), 10);
     ctx.shadowBlur = 0;
     ctx.fillStyle = boss.reflect ? boss.tierColor : '#cfe6ff';
-    ctx.font = 'bold 12px Consolas, monospace';
+    ctx.font = 'bold 12px Menlo, Consolas, monospace';
     ctx.textAlign = 'center';
     ctx.fillText(boss.reflect ? 'BOSS — 반사 중!' : 'BOSS #' + (bossKills + 1), W / 2, by - 6);
   }
@@ -2030,11 +2097,11 @@
         ctx.fillStyle = hc;
         ctx.shadowColor = hc;
         ctx.shadowBlur = 26 + 20 * tw; // 외곽 글로우 강화
-        ctx.font = 'bold ' + Math.round(36 * pulse) + 'px Consolas, monospace';
+        ctx.font = 'bold ' + Math.round(36 * pulse) + 'px Menlo, Consolas, monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('♥', 0, 0);
-        ctx.fillText('♥', 0, 0); // 두 번 그려 글로우 더 밝게
+        ctx.fillText('♥︎', 0, 0);
+        ctx.fillText('♥︎', 0, 0); // 두 번 그려 글로우 더 밝게
         // 주기적 흰 스파클 ✦ — 크고 밝게, 대각 두 방향
         const sc = d.t % 48;
         if (sc < 16) {
@@ -2043,9 +2110,9 @@
           ctx.fillStyle = '#ffffff';
           ctx.shadowColor = '#ffffff';
           ctx.shadowBlur = 16;
-          ctx.font = 'bold ' + Math.round(22 * sa) + 'px Consolas, monospace';
+          ctx.font = 'bold ' + Math.round(22 * sa) + 'px Menlo, Consolas, monospace';
           ctx.fillText('✦', 20, -18);
-          ctx.font = 'bold ' + Math.round(14 * sa) + 'px Consolas, monospace';
+          ctx.font = 'bold ' + Math.round(14 * sa) + 'px Menlo, Consolas, monospace';
           ctx.fillText('✦', -20, 14);
         }
         ctx.textBaseline = 'alphabetic';
@@ -2103,7 +2170,7 @@
         ctx.shadowBlur = 0;
         ctx.fillStyle = '#ff5555';
         ctx.globalAlpha = pulse;
-        ctx.font = 'bold 10px Consolas, monospace';
+        ctx.font = 'bold 10px Menlo, Consolas, monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText('☠', 0, 1);
@@ -2122,7 +2189,7 @@
         ctx.stroke();
         ctx.shadowBlur = 0;
         ctx.fillStyle = d.type.color;
-        ctx.font = 'bold 11px Consolas, monospace';
+        ctx.font = 'bold 11px Menlo, Consolas, monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(d.type.letter, d.x, d.y + 1);
@@ -2254,7 +2321,7 @@
         ctx.fillStyle = '#ff3040';
         ctx.shadowColor = '#ff3040';
         ctx.shadowBlur = 26;
-        ctx.font = 'bold 54px Consolas, monospace';
+        ctx.font = 'bold 54px Menlo, Consolas, monospace';
         ctx.textAlign = 'center';
         ctx.fillText('💥 폭탄 피격!', 0, 0);
         ctx.restore();
@@ -2270,7 +2337,7 @@
       if (!t.timed || state.buffs[t.key] <= 0) continue;
       const remain = state.buffs[t.key] / BUFF_DURATION;
       ctx.fillStyle = t.color;
-      ctx.font = 'bold 11px Consolas, monospace';
+      ctx.font = 'bold 11px Menlo, Consolas, monospace';
       ctx.fillText(t.letter + ' ' + t.name, 14, by + 9);
       ctx.fillStyle = '#101a30';
       ctx.fillRect(110, by + 3, 60, 5);
@@ -2281,21 +2348,21 @@
     // 멀티볼 개수 표시
     if (state.balls.length > 1) {
       ctx.fillStyle = '#7f7bff';
-      ctx.font = 'bold 11px Consolas, monospace';
+      ctx.font = 'bold 11px Menlo, Consolas, monospace';
       ctx.fillText('M 멀티볼 x' + state.balls.length, 14, by + 9);
       by += 18;
     }
     // 실드 남은 시간
     if (state.shield > 0) {
       ctx.fillStyle = '#3fa9ff';
-      ctx.font = 'bold 11px Consolas, monospace';
+      ctx.font = 'bold 11px Menlo, Consolas, monospace';
       ctx.fillText('🛡 실드 ' + Math.ceil(state.shield / 60) + 's', 14, by + 9);
     }
 
     // 콤보 표시
     if (state.combo >= 2 && state.mode === 'play') {
       ctx.fillStyle = '#ffc233';
-      ctx.font = 'bold 16px Consolas, monospace';
+      ctx.font = 'bold 16px Menlo, Consolas, monospace';
       ctx.textAlign = 'center';
       ctx.fillText('COMBO x' + Math.min(state.combo, 5), W / 2, state.boss ? 62 : 40);
     }
@@ -2324,7 +2391,7 @@
         ctx.fillStyle = '#ff3040';
         ctx.shadowColor = '#ff3040';
         ctx.shadowBlur = 24;
-        ctx.font = 'bold 64px Consolas, monospace';
+        ctx.font = 'bold 64px Menlo, Consolas, monospace';
         ctx.fillText(word[i], 0, 0);
         ctx.restore();
       }
@@ -2332,7 +2399,7 @@
       ctx.shadowBlur = 0;
       if (state.dyingT < 55) {
         ctx.fillStyle = '#5f7396';
-        ctx.font = '14px Consolas, monospace';
+        ctx.font = '14px Menlo, Consolas, monospace';
         ctx.fillText('잠시 후 이니셜 입력…  (클릭 또는 SPACE로 건너뛰기)', W / 2, H / 2 + 34);
       }
       ctx.restore();
@@ -2348,19 +2415,19 @@
       ctx.fillStyle = '#ff3df0';
       ctx.shadowColor = '#ff3df0';
       ctx.shadowBlur = 20;
-      ctx.font = 'bold 40px Consolas, monospace';
+      ctx.font = 'bold 40px Menlo, Consolas, monospace';
       ctx.fillText('GAME OVER', W / 2, 220);
       ctx.shadowBlur = 0;
 
       ctx.fillStyle = '#ffc233';
       ctx.shadowColor = '#ffc233';
       ctx.shadowBlur = 16;
-      ctx.font = 'bold 52px Consolas, monospace';
+      ctx.font = 'bold 52px Menlo, Consolas, monospace';
       ctx.fillText(String(state.score), W / 2, 300);
       ctx.shadowBlur = 0;
 
       ctx.fillStyle = '#cfe6ff';
-      ctx.font = 'bold 18px Consolas, monospace';
+      ctx.font = 'bold 18px Menlo, Consolas, monospace';
       ctx.fillText('이니셜을 입력하세요', W / 2, 380);
 
       // 릴 물리 — 드래그 중이 아니면 관성 회전 → 감속 → 정수 스냅
@@ -2402,7 +2469,7 @@
           const dist = Math.abs(k - center);
           ctx.globalAlpha = Math.max(0.08, 1 - dist * 0.75);
           ctx.fillStyle = dist < 0.5 ? '#22e6ff' : '#5f7396';
-          ctx.font = 'bold 36px Consolas, monospace';
+          ctx.font = 'bold 36px Menlo, Consolas, monospace';
           ctx.textAlign = 'center';
           ctx.fillText(ch, r.x + r.w / 2, yy);
         }
@@ -2425,23 +2492,23 @@
       const urgent = remainSec <= 3;
       ctx.textAlign = 'left';
       ctx.fillStyle = '#5f7396';
-      ctx.font = '13px Consolas, monospace';
+      ctx.font = '13px Menlo, Consolas, monospace';
       ctx.fillText('입력 시간', r2.x + r2.w + 24, r2.y + 28);
       if (urgent && state.tick % 30 < 15) ctx.globalAlpha = 0.45; // 3초 이하 — 깜빡임
       ctx.fillStyle = urgent ? '#ff5555' : '#22e6ff';
       ctx.shadowColor = ctx.fillStyle;
       ctx.shadowBlur = urgent ? 14 : 8;
-      ctx.font = 'bold 36px Consolas, monospace';
+      ctx.font = 'bold 36px Menlo, Consolas, monospace';
       ctx.fillText(remainSec + '초', r2.x + r2.w + 24, r2.y + 66);
       ctx.shadowBlur = 0;
       ctx.globalAlpha = 1;
       ctx.fillStyle = '#5f7396';
-      ctx.font = '11px Consolas, monospace';
+      ctx.font = '11px Menlo, Consolas, monospace';
       ctx.fillText('만료 시 자동 저장 → 데모', r2.x + r2.w + 24, r2.y + 90);
 
       ctx.textAlign = 'center';
       ctx.fillStyle = '#5f7396';
-      ctx.font = '14px Consolas, monospace';
+      ctx.font = '14px Menlo, Consolas, monospace';
       ctx.fillText('위아래 드래그·휠로 돌리기 (속도 감응) · 키보드 0~9 A~Z 직접 입력 · 동작 시 20초로 연장', W / 2, 512);
 
       // 클릭 가능한 버튼 3개 — 저장 / 닫기 / 새 게임
@@ -2449,7 +2516,7 @@
       drawUiButton(ENTRY_CLOSE_BTN, '✕ 닫기 (ESC)', '#ff9a3d');
       drawUiButton(NEWGAME_BTN, '▶ 새 게임 시작', '#2effc8');
       ctx.fillStyle = '#5f7396';
-      ctx.font = '12px Consolas, monospace';
+      ctx.font = '12px Menlo, Consolas, monospace';
       ctx.textAlign = 'center';
       ctx.fillText('(새 게임 = 기록 저장 없이 바로 시작)', W / 2, NEWGAME_BTN.y + 66);
       ctx.restore();
@@ -2465,26 +2532,26 @@
       ctx.fillStyle = '#ff3df0';
       ctx.shadowColor = '#ff3df0';
       ctx.shadowBlur = 20;
-      ctx.font = 'bold 40px Consolas, monospace';
+      ctx.font = 'bold 40px Menlo, Consolas, monospace';
       ctx.fillText('GAME OVER', W / 2, 200);
       ctx.shadowBlur = 0;
 
       ctx.fillStyle = '#5f7396';
-      ctx.font = '14px Consolas, monospace';
+      ctx.font = '14px Menlo, Consolas, monospace';
       ctx.fillText('최종 점수', W / 2, 260);
       ctx.fillStyle = '#ffc233';
       ctx.shadowColor = '#ffc233';
       ctx.shadowBlur = 16;
-      ctx.font = 'bold 52px Consolas, monospace';
+      ctx.font = 'bold 52px Menlo, Consolas, monospace';
       ctx.fillText(String(state.score), W / 2, 315);
       ctx.shadowBlur = 0;
       if (state.score >= best && state.score > 0) {
         ctx.fillStyle = '#2effc8';
-        ctx.font = 'bold 16px Consolas, monospace';
+        ctx.font = 'bold 16px Menlo, Consolas, monospace';
         ctx.fillText('★ 최고 기록 경신! ★', W / 2, 348);
       } else {
         ctx.fillStyle = '#5f7396';
-        ctx.font = '13px Consolas, monospace';
+        ctx.font = '13px Menlo, Consolas, monospace';
         ctx.fillText('최고 기록 ' + best + '점 · 도달 레벨 ' + state.level, W / 2, 348);
       }
 
@@ -2492,7 +2559,7 @@
       const recs = state.lastRecords || [];
       const panelY = 400, rowH = 34;
       ctx.fillStyle = '#cfe6ff';
-      ctx.font = 'bold 16px Consolas, monospace';
+      ctx.font = 'bold 16px Menlo, Consolas, monospace';
       ctx.fillText(
         (fdb ? '— 글로벌 랭킹 · 참가자 ' : '— 랭킹 · 기록 ') + recs.length + '명 —',
         W / 2, panelY);
@@ -2522,7 +2589,7 @@
           ctx.fillRect(W / 2 - 228, y - 20, 456, 28);
         }
         ctx.fillStyle = isMe ? '#ffc233' : (i === 0 ? '#ff3df0' : '#cfe6ff');
-        ctx.font = (isMe ? 'bold ' : '') + '15px Consolas, monospace';
+        ctx.font = (isMe ? 'bold ' : '') + '15px Menlo, Consolas, monospace';
         ctx.textAlign = 'left';
         ctx.fillText((i + 1) + '위', W / 2 - 220, y);
         ctx.fillStyle = isMe ? '#ffc233' : '#22e6ff';
@@ -2531,10 +2598,10 @@
         ctx.textAlign = 'right';
         ctx.fillText(r.score + '점', W / 2 + 15, y);
         ctx.fillStyle = isMe ? '#ffc233' : '#5f7396';
-        ctx.font = '13px Consolas, monospace';
+        ctx.font = '13px Menlo, Consolas, monospace';
         ctx.fillText('LV' + r.level, W / 2 + 90, y);
         // 날짜는 축약(오전/오후 제거)해서 겹침 방지
-        ctx.font = '12px Consolas, monospace';
+        ctx.font = '12px Menlo, Consolas, monospace';
         ctx.fillText((r.when || '').replace('오전 ', '').replace('오후 ', ''), W / 2 + 220, y);
         ctx.textAlign = 'center';
       }
@@ -2548,12 +2615,12 @@
         ctx.fillStyle = '#22e6ff';
         ctx.fillRect(W / 2 + 242, thumbY, 6, thumbH);
         ctx.fillStyle = '#5f7396';
-        ctx.font = '12px Consolas, monospace';
+        ctx.font = '12px Menlo, Consolas, monospace';
         ctx.fillText('마우스 휠로 스크롤', W / 2, listTop + listH + 22);
       }
 
       ctx.fillStyle = '#cfe6ff';
-      ctx.font = '15px Consolas, monospace';
+      ctx.font = '15px Menlo, Consolas, monospace';
       ctx.fillText('SPACE로 다시 시작', W / 2, H - 30);
       ctx.restore();
       return;
@@ -2571,11 +2638,11 @@
       ctx.fillStyle = state.mode === 'over' ? '#ff3df0' : '#22e6ff';
       ctx.shadowColor = ctx.fillStyle;
       ctx.shadowBlur = 18;
-      ctx.font = 'bold 30px Consolas, monospace';
+      ctx.font = 'bold 30px Menlo, Consolas, monospace';
       ctx.fillText(msg[0], W / 2, H / 2 - 12);
       ctx.shadowBlur = 0;
       ctx.fillStyle = '#cfe6ff';
-      ctx.font = '15px Consolas, monospace';
+      ctx.font = '15px Menlo, Consolas, monospace';
       if (msg[1]) ctx.fillText(msg[1], W / 2, H / 2 + 24);
     }
 
@@ -2588,21 +2655,21 @@
       ctx.fillStyle = '#22e6ff';
       ctx.shadowColor = '#22e6ff';
       ctx.shadowBlur = 34;
-      ctx.font = 'bold 76px Consolas, monospace';
+      ctx.font = 'bold 76px Menlo, Consolas, monospace';
       ctx.textAlign = 'center';
       ctx.fillText('START GAME', 0, 0);
       ctx.restore();
       ctx.shadowBlur = 0;
       if (Math.floor(state.tick / 40) % 2 === 0) {
         ctx.fillStyle = '#cfe6ff';
-        ctx.font = '17px Consolas, monospace';
+        ctx.font = '17px Menlo, Consolas, monospace';
         ctx.textAlign = 'center';
         ctx.fillText('클릭 또는 SPACE를 누르세요', W / 2, H / 2 + 52);
       }
 
       // 난이도 단계 선택 (1~10 라운드 사각형)
       ctx.fillStyle = '#5f7396';
-      ctx.font = '13px Consolas, monospace';
+      ctx.font = '13px Menlo, Consolas, monospace';
       ctx.textAlign = 'center';
       ctx.fillText(
         manualStage === null
@@ -2623,7 +2690,7 @@
         ctx.stroke();
         ctx.shadowBlur = 0;
         ctx.fillStyle = sel ? '#ffc233' : auto ? '#22e6ff' : '#5f7396';
-        ctx.font = 'bold 18px Consolas, monospace';
+        ctx.font = 'bold 18px Menlo, Consolas, monospace';
         ctx.fillText(String(i + 1), r.x + r.w / 2, r.y + 29);
       }
 
@@ -2638,13 +2705,13 @@
         ctx.fillStyle = '#ffc233';
         ctx.shadowColor = '#ffc233';
         ctx.shadowBlur = 22;
-        ctx.font = 'bold 30px Consolas, monospace';
+        ctx.font = 'bold 30px Menlo, Consolas, monospace';
         ctx.fillText('🎆 JACKPOT TIME!! 🎆', 0, 0);
         ctx.restore();
         ctx.shadowBlur = 0;
       } else {
         ctx.fillStyle = '#5f7396';
-        ctx.font = '15px Consolas, monospace';
+        ctx.font = '15px Menlo, Consolas, monospace';
         ctx.fillText(ph === 'novice' ? 'DEMO — 초보 모드 🐣' : 'DEMO — 프로 모드 😎', W / 2, H / 2 - 80);
       }
 
@@ -2661,9 +2728,9 @@
       ];
       const legendY = H / 2 + 205;
       ctx.fillStyle = '#5f7396';
-      ctx.font = '13px Consolas, monospace';
+      ctx.font = '13px Menlo, Consolas, monospace';
       ctx.fillText('— 아이템 안내 —', W / 2, legendY - 28);
-      ctx.font = 'bold 15px Consolas, monospace';
+      ctx.font = 'bold 15px Menlo, Consolas, monospace';
       ctx.textAlign = 'left';
       for (let i = 0; i < LEGEND.length; i++) {
         const col = i % 2, row = Math.floor(i / 2);
@@ -2676,14 +2743,14 @@
       const ranks = (cloudTop && cloudTop.length ? cloudTop : localTopCache).slice(0, 3);
       if (ranks.length) {
         ctx.fillStyle = '#5f7396';
-        ctx.font = '13px Consolas, monospace';
+        ctx.font = '13px Menlo, Consolas, monospace';
         ctx.fillText(fdb ? '— 🏆 글로벌 랭킹 TOP 3 —' : '— 🏆 랭킹 TOP 3 —', W / 2, H - 102);
         const medals = ['🥇', '🥈', '🥉'];
         const rankColors = ['#ffd700', '#c0c0c0', '#cd7f32'];
         const spread = Math.min(240, (W - 160) / 3); // 화면 폭에 맞춰 간격
         for (let i = 0; i < ranks.length; i++) {
           ctx.fillStyle = rankColors[i];
-          ctx.font = (i === 0 ? 'bold 20px' : 'bold 17px') + ' Consolas, monospace';
+          ctx.font = (i === 0 ? 'bold 20px' : 'bold 17px') + ' Menlo, Consolas, monospace';
           ctx.fillText(
             medals[i] + ' ' + (ranks[i].name || '---') + ' ' + ranks[i].score + '점',
             W / 2 + (i - 1) * spread, H - 72);
@@ -2697,7 +2764,7 @@
       ctx.fillStyle = state.toast.color;
       ctx.shadowColor = state.toast.color;
       ctx.shadowBlur = 16;
-      ctx.font = 'bold 28px Consolas, monospace';
+      ctx.font = 'bold 28px Menlo, Consolas, monospace';
       ctx.textAlign = 'center';
       ctx.fillText(state.toast.text, W / 2, H / 2 - 80);
       ctx.shadowBlur = 0;
@@ -2905,13 +2972,20 @@
   }
   // 포인터 잠금 — 클릭하면 커서가 게임에 고정되어 화면 밖으로 못 나감 (ESC로 해제)
   let pointerLocked = false;
-  document.addEventListener('pointerlockchange', () => {
-    pointerLocked = document.pointerLockElement === canvas;
-  });
+  // WebKit/구형은 프리픽스만 지원 — request·change를 반드시 함께 프리픽스 처리
+  ['pointerlockchange', 'webkitpointerlockchange', 'mozpointerlockchange'].forEach(ev =>
+    document.addEventListener(ev, () => {
+      const el = document.pointerLockElement || document.webkitPointerLockElement || document.mozPointerLockElement;
+      pointerLocked = (el === canvas);
+    })
+  );
+  // Safari는 포인터락 movementX에 devicePixelRatio가 곱해지는 버그 → 보정
+  const _mvScale = (/^((?!chrome|android).)*safari/i.test(navigator.userAgent)) ? (window.devicePixelRatio || 1) : 1;
   function requestLock() {
-    if (pointerLocked || !canvas.requestPointerLock) return;
+    const req = canvas.requestPointerLock || canvas.webkitRequestPointerLock || canvas.mozRequestPointerLock;
+    if (pointerLocked || !req) return;
     try {
-      const r = canvas.requestPointerLock();
+      const r = req.call(canvas);
       if (r && r.catch) r.catch(() => {}); // 차단된 환경에선 조용히 일반 모드로
     } catch (e) {}
   }
@@ -2947,7 +3021,8 @@
     if (canvas.style.cursor) canvas.style.cursor = ''; // 입력 화면을 벗어나면 커서 복원
     if (pointerLocked) {
       const rect = canvas.getBoundingClientRect();
-      state.paddle.x += e.movementX * (W / rect.width);
+      const mv = (e.movementX || 0) / _mvScale; // undefined→NaN 방어 + Safari DPR 보정
+      state.paddle.x += mv * (W / rect.width);
     } else {
       state.paddle.x = pointFromEvent(e) - state.paddle.w / 2;
     }
@@ -2977,7 +3052,7 @@
       const si = stageAtPoint(apt.x, apt.y);
       if (si >= 0) {
         manualStage = (manualStage === si) ? null : si; // 같은 칸 재클릭 = 자동 복귀
-        localStorage.setItem('neon-breakout-stage', manualStage === null ? 'auto' : manualStage);
+        safeStore.set('neon-breakout-stage', manualStage === null ? 'auto' : manualStage);
         return;
       }
       requestLock(); startRealGame(); return;
@@ -3032,7 +3107,7 @@
       const si = stageAtPoint(apt.x, apt.y);
       if (si >= 0) {
         manualStage = (manualStage === si) ? null : si;
-        localStorage.setItem('neon-breakout-stage', manualStage === null ? 'auto' : manualStage);
+        safeStore.set('neon-breakout-stage', manualStage === null ? 'auto' : manualStage);
         return;
       }
       startRealGame(); return;
@@ -3069,14 +3144,26 @@
   // 전체 화면 토글 — F 키 / ⛶ 버튼 (노션 임베드에서 크게 보기)
   function toggleFullscreen() {
     try {
-      if (document.fullscreenElement) document.exitFullscreen();
-      else if (document.documentElement.requestFullscreen) {
-        const r = document.documentElement.requestFullscreen();
-        if (r && r.catch) r.catch(() => {}); // 임베드가 막으면 조용히 무시
+      const d = document, el = d.documentElement;
+      const fsEl = d.fullscreenElement || d.webkitFullscreenElement || d.webkitCurrentFullScreenElement || d.mozFullScreenElement;
+      if (fsEl) {
+        const exit = d.exitFullscreen || d.webkitExitFullscreen || d.webkitCancelFullScreen || d.mozCancelFullScreen;
+        if (exit) { const r = exit.call(d); if (r && r.catch) r.catch(() => {}); }
+      } else {
+        const req = el.requestFullscreen || el.webkitRequestFullscreen || el.webkitRequestFullScreen || el.mozRequestFullScreen;
+        if (req) {
+          const r = (req === el.webkitRequestFullscreen && window.Element && Element.ALLOW_KEYBOARD_INPUT)
+            ? req.call(el, Element.ALLOW_KEYBOARD_INPUT) : req.call(el); // 구형 webkit 전체화면 중 키입력 허용
+          if (r && r.catch) r.catch(() => {}); // webkit 프리픽스는 undefined 반환 → 가드 필수
+        }
       }
     } catch (e) {}
   }
   const fsBtn = document.getElementById('fsBtn');
+  // 전체화면 미지원(아이폰 등)이면 버튼 숨겨 오해 방지
+  const _fsSupported = document.fullscreenEnabled || document.webkitFullscreenEnabled ||
+    !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
+  if (!_fsSupported) fsBtn.style.display = 'none';
   fsBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     toggleFullscreen();
