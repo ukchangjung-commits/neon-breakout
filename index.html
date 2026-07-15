@@ -1588,60 +1588,73 @@
       const ballUrgent = bestY > H * 0.55; // 공이 하단 접근 중 — 다른 것보다 우선
       const pCx = p.x + p.w / 2;
 
-      if (phase !== 'novice') {
-        // 2순위: 공이 급하지 않으면 아이템 캡슐 주우러 이동 (보고 배우기!)
-        if (!ballUrgent) {
-          let item = null;
-          for (const d of state.drops) {
-            if (!d.hazard && (!item || d.y > item.y)) item = d;
-          }
-          if (item) target = item.x;
-        }
-        // 3순위: 폭탄이 패들 쪽으로 떨어지면 — 격추하거나 회피
-        let threat = null;
+      const shieldOn = state.shield > 0;
+      // 실드(파란 하트) 켜지면 — 폭탄을 일부러 실드로 받아 무피해로 튕겨내는 장면 시연
+      if (shieldOn && state.tick % 45 === 0) spawnDrop(pCx + (Math.random() * 120 - 60), 90, true);
+
+      // 아이템·하트 주우러 — 모든 단계(초보 포함)에서 규칙 시연. 공이 급하면 생존 우선
+      if (!ballUrgent) {
+        let item = null;
         for (const d of state.drops) {
-          if (d.hazard && d.y > H - 280 && Math.abs(d.x - pCx) < 170) threat = d;
+          if (!d.hazard && (!item || d.y > item.y)) item = d;
         }
-        if (threat) {
-          if (phase === 'jackpot' || Math.random() < 0.6) {
-            target = threat.x; // 정렬해서 레이저로 격추
-            if (Math.abs(threat.x - pCx) < 26 && state.energy > shotCost()) tryShoot();
-          } else if (!ballUrgent) {
-            target = threat.x < W / 2 ? threat.x + 240 : threat.x - 240; // 옆으로 피신
-          }
+        if (item) target = item.x;
+      }
+      // 폭탄 대응 — 실드면 일부러 받아냄 / 초보는 회피 안 함(축소 규칙 시연) / 프로·잭팟은 격추·회피
+      let threat = null;
+      for (const d of state.drops) {
+        if (d.hazard && d.y > H - 280 && Math.abs(d.x - pCx) < 200) threat = d;
+      }
+      if (threat) {
+        if (shieldOn) {
+          target = threat.x; // 실드 아래로 정렬 — 폭탄이 돔에 맞아 파괴(무피해)
+        } else if (phase === 'novice') {
+          /* 초보 — 회피/격추 안 함: 가끔 맞아 '폭탄=축소' 규칙을 차분히 보여줌 */
+        } else if (phase === 'jackpot' || Math.random() < 0.7) {
+          target = threat.x; // 정렬해 레이저로 격추
+          if (Math.abs(threat.x - pCx) < 26 && state.energy > shotCost()) tryShoot();
+        } else if (!ballUrgent) {
+          target = threat.x < W / 2 ? threat.x + 240 : threat.x - 240; // 옆으로 회피
         }
       }
 
-      if (phase === 'novice') {
-        target += Math.sin(state.tick * 0.05) * 100; // 초보 — 손이 비틀비틀 (폭탄도 실수로 맞음)
-        p.x += (target - p.w / 2 - p.x) * 0.045;     // 반응도 느림
-      } else {
-        p.x += (target - p.w / 2 - p.x) * 0.25;      // 프로 — 즉각 반응
-      }
+      // 이동 — 초보는 차분·부드럽게(비틀거림 없음, 룰 보여주기), 프로·잭팟은 즉각
+      if (phase === 'novice') p.x += (target - p.w / 2 - p.x) * 0.10;
+      else                    p.x += (target - p.w / 2 - p.x) * 0.28;
       p.x = Math.max(8, Math.min(W - p.w - 8, p.x));
       if (state.mode === 'ready' && --state.attractWait <= 0) launch();
+
       if (state.mode === 'play') {
-        const fireRate = phase === 'novice' ? 0.012 : phase === 'pro' ? 0.12 : 0.3;
+        // 발사 — 초보: 가끔(규칙) / 프로: 많이(점수) / 잭팟: 폭풍
+        const fireRate = phase === 'novice' ? 0.05 : phase === 'pro' ? 0.22 : 0.4;
         if (state.energy > 30 && Math.random() < fireRate) tryShoot();
+
+        if (phase === 'pro') {
+          // 프로 — "이렇게 하면 점수 많이!": 저장 세트 발동 + 멀티볼 유지
+          if (state.tick % 150 === 0 && state.ammo.rapid > 0) useAmmoSet('rapid');
+          if (state.tick % 210 === 0 && state.ammo.bomb > 0) useAmmoSet('bomb');
+          if (state.balls.length < 2 && state.tick % 300 === 0) splitBalls();
+        }
         if (phase === 'jackpot') {
-          // 잭팟 타임 — 4줄+고속 버프 폭풍 + 점수 샤워 + 폭죽·색종이
+          // 잭팟 — 신나게 펑펑: 4줄+고속 폭풍 + 멀티볼 + 점수 샤워 + 폭죽·색종이 (게임하고 싶게)
           state.buffs.quad = Math.max(state.buffs.quad, 40);
           state.buffs.rapid = Math.max(state.buffs.rapid, 40);
-          if (state.tick % 5 === 0) {
-            state.score += 40 + Math.floor(Math.random() * 140);
-            recentGain += 90; // 자리수 펑펑 폭발 유지
+          if (state.balls.length < 3 && state.tick % 80 === 0) splitBalls();
+          if (state.tick % 4 === 0) {
+            state.score += 40 + Math.floor(Math.random() * 160);
+            recentGain += 100; // 자리수 펑펑
           }
-          if (state.tick % 50 === 0) {
+          if (state.tick % 30 === 0) {
             for (let i = 0; i < 3; i++) {
               state.fireworks.push({
-                delay: i * 8,
+                delay: i * 6,
                 x: 60 + Math.random() * (W - 120),
-                y: 80 + Math.random() * 300,
+                y: 80 + Math.random() * 320,
                 color: ROW_COLORS[Math.floor(Math.random() * ROW_COLORS.length)],
               });
             }
           }
-          if (state.tick % 120 === 0) confettiBlast();
+          if (state.tick % 75 === 0) confettiBlast();
         }
       }
     }
@@ -2089,7 +2102,6 @@
   }
 
   function draw() {
-    state.tick++;
     ctx.save();
     if (state.shake > 0) {
       ctx.translate((Math.random() - 0.5) * state.shake, (Math.random() - 0.5) * state.shake);
@@ -3002,7 +3014,11 @@
     zodiacRow.classList.toggle('jackpot', jack);
   }
 
-  function loop() {
+  // 고정 타임스텝 — 물리는 60Hz로만 진행(모니터 주사율·OS·브라우저 무관 동일 속도), 렌더는 프레임마다
+  const STEP_MS = 1000 / 60;
+  let _lastT = 0, _acc = 0;
+  function stepFixed() {
+    state.tick++;
     // 무입력 20초 → 시뮬레이션 모드 (일시정지 중엔 예외)
     if (!state.attract && state.mode !== 'pause' && state.tick - lastInputTick > IDLE_LIMIT) {
       enterAttract();
@@ -3012,6 +3028,16 @@
       enterAttract(); // 내부에서 confirmEntry()로 현재 릴 이니셜 저장
     }
     step();
+  }
+  function loop(now) {
+    if (!now) now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    if (!_lastT) _lastT = now;
+    let dt = now - _lastT; _lastT = now;
+    if (dt > 250) dt = 250;           // 탭 복귀 등 큰 공백 → 몰아치기 방지
+    _acc += dt;
+    let n = 0;
+    while (_acc >= STEP_MS && n < 5) { stepFixed(); _acc -= STEP_MS; n++; }
+    if (n >= 5) _acc = 0;             // 밀린 스텝은 폐기 (느린 기기 안전장치)
     draw();
     updateZodiac();
     updateScoreDisplay();
