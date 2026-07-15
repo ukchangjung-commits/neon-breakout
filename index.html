@@ -40,7 +40,7 @@
     display: flex;
     justify-content: space-between;
     width: 100%;
-    font-size: clamp(22px, 4vw, 54px);
+    font-size: clamp(20px, calc(var(--uw, 100vw) * 0.04), 54px);
     font-weight: bold;
     line-height: 1.1;
     padding: 6px 2px 2px;
@@ -120,18 +120,19 @@
   /* ---- 도움말 버튼 & 패널 ---- */
   .cabinet { position: relative; }
   #helpBtn, #muteBtn, #fsBtn {
-    width: clamp(34px, 9vw, 60px); height: clamp(34px, 9vw, 60px);
+    width: clamp(32px, calc(var(--uw, 100vw) * 0.072), 60px);
+    height: clamp(32px, calc(var(--uw, 100vw) * 0.072), 60px);
     border: 1px solid var(--line);
     border-radius: 10px;
     background: var(--panel);
     color: var(--cyan);
-    font: bold clamp(18px, 5vw, 32px) ui-monospace, Menlo, Consolas, 'Courier New', monospace;
+    font: bold clamp(16px, calc(var(--uw, 100vw) * 0.045), 32px) ui-monospace, Menlo, Consolas, 'Courier New', monospace;
     cursor: pointer;
     text-shadow: 0 0 8px rgba(34, 230, 255, 0.6);
     flex: none;
+    display: flex; align-items: center; justify-content: center;
   }
-  #muteBtn { font-size: clamp(16px, 4.5vw, 28px); }
-  #fsBtn { font-size: clamp(17px, 4.8vw, 30px); }
+  #muteBtn svg, #fsBtn svg { width: 56%; height: 56%; display: block; }
   #helpBtn:hover, #muteBtn:hover, #fsBtn:hover { border-color: var(--cyan); box-shadow: 0 0 10px rgba(34, 230, 255, 0.35); }
   .help-panel {
     display: none;
@@ -164,7 +165,7 @@
     display: flex;
     justify-content: space-between;
     gap: 8px;
-    font-size: clamp(13px, 3.4vw, 26px);
+    font-size: clamp(12px, calc(var(--uw, 100vw) * 0.033), 26px);
     padding: 10px 14px;
     background: var(--panel);
     border: 1px solid var(--line);
@@ -174,22 +175,26 @@
   .hud { align-items: center; }
   .hud .label { color: var(--dim); margin-right: 6px; }
   .hud { position: relative; min-height: 96px; }
-  .hud-side { display: flex; align-items: center; gap: clamp(5px, 1.8vw, 16px); flex: none; }
+  .hud-side { display: flex; align-items: center; gap: clamp(4px, calc(var(--uw, 100vw) * 0.018), 16px); flex: none; }
+  .hud.narrow .label { display: none; } /* 좁은 폭(실측 기준) — 라벨 숨김 */
   .score-wrap {
     flex: 1 1 auto;
     min-width: 0;              /* 좁아지면 줄어들어 좌우 그룹과 겹치지 않음 */
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: clamp(4px, 1.5vw, 12px);
+    gap: clamp(4px, calc(var(--uw, 100vw) * 0.015), 12px);
     pointer-events: none;
     overflow: hidden;
   }
   /* 세트 아이콘 패널 — 탄창 줄 / 에너지 바 / 폭탄 줄 */
   .ammo-panel { display: flex; flex-direction: column; gap: 4px; }
-  .ammo-row { display: flex; gap: 3px; font-size: 15px; line-height: 1; }
-  .ammo-row span { opacity: 0.15; filter: grayscale(1); transition: opacity 0.15s, filter 0.15s; }
-  .ammo-row span.on { opacity: 1; filter: none; }
+  /* 탄창/폭탄 아이콘 — 이모지 대신 직접 그린 도형(어느 브라우저서나 크기 일정) */
+  .ammo-row { display: flex; gap: 4px; align-items: center; height: 15px; }
+  .ammo-row .cell { opacity: 0.2; transition: opacity 0.15s; flex: none; }
+  .ammo-row .cell.on { opacity: 1; }
+  .ammo-row .rapid { width: 7px; height: 14px; border-radius: 2px; background: #22e6ff; box-shadow: 0 0 5px rgba(34, 230, 255, 0.7); }
+  .ammo-row .bomb { width: 13px; height: 13px; border-radius: 50%; background: #ff3df0; box-shadow: 0 0 5px rgba(255, 61, 240, 0.7); }
   .energy-bar {
     width: 100%;
     height: 8px;
@@ -206,7 +211,7 @@
   .hud .score {
     color: var(--amber);
     text-shadow: 0 0 10px rgba(255, 194, 51, 0.6), 0 0 24px rgba(255, 194, 51, 0.3);
-    font-size: clamp(28px, 8.5vw, 80px);
+    font-size: clamp(26px, calc(var(--uw, 100vw) * 0.095), 80px);
     font-weight: bold;
     display: flex;
     line-height: 1;
@@ -232,18 +237,18 @@
   .hud .lives {
     color: #ff5577;
     text-shadow: 0 0 10px rgba(255, 85, 119, 0.6), 0 0 22px rgba(255, 85, 119, 0.3);
-    letter-spacing: clamp(1px, 0.6vw, 4px);
-    font-size: clamp(15px, 4.2vw, 30px);
+    letter-spacing: clamp(1px, calc(var(--uw, 100vw) * 0.006), 4px);
+    font-size: clamp(14px, calc(var(--uw, 100vw) * 0.043), 30px);
     line-height: 1.08;
     display: inline-block;
     transform-origin: right center;
     /* 하트가 많아지면 두 줄로 감쌈 */
-    max-width: min(285px, 40vw);
+    max-width: min(285px, calc(var(--uw, 100vw) * 0.4));
     white-space: normal;
     word-break: break-all;
     text-align: left;
   }
-  .hud .lives.many { font-size: clamp(11px, 3vw, 20px); }
+  .hud .lives.many { font-size: clamp(10px, calc(var(--uw, 100vw) * 0.032), 20px); }
   @keyframes lifeLost {
     0%   { transform: scale(1); }
     12%  { transform: scale(2.3); }
@@ -335,8 +340,8 @@
         <div class="energy-bar"><div id="energyFill"></div></div>
         <div class="ammo-row" id="ammoBomb"></div>
       </div>
-      <button id="muteBtn" title="소리 켜기/끄기" aria-label="음소거">🔊</button>
-      <button id="fsBtn" title="전체 화면 (F)" aria-label="전체 화면">⛶</button>
+      <button id="muteBtn" title="소리 켜기/끄기" aria-label="음소거"></button>
+      <button id="fsBtn" title="전체 화면 (F)" aria-label="전체 화면"></button>
       <button id="helpBtn" title="조작법 보기" aria-label="도움말">?</button>
     </div>
   </div>
@@ -411,11 +416,23 @@
   }
   fitCanvas();
   let W = canvas.width, H = canvas.height;
-  // 창 크기 변경·모바일 화면 회전 시 내부 해상도 재계산 (세로↔가로 왜곡 방지)
+  // HUD 실측 폭을 CSS 변수(--uw)로 반영 — 노션 iframe의 vw 오작동 회피(No.1 ①)
+  function setUW() {
+    const hudEl = document.querySelector('.hud');
+    const w = (hudEl && hudEl.clientWidth) || (canvas.parentElement && canvas.parentElement.clientWidth) || 700;
+    document.documentElement.style.setProperty('--uw', w + 'px');
+    if (hudEl) hudEl.classList.toggle('narrow', w < 680);
+  }
+  setUW();
+  // 창 크기 변경·모바일 화면 회전 시 내부 해상도·UI 크기 재계산
   let _resizeT;
-  function refit() { fitCanvas(); W = canvas.width; H = canvas.height; }
+  function refit() { fitCanvas(); W = canvas.width; H = canvas.height; setUW(); if (typeof fitScore === 'function') fitScore(); }
   window.addEventListener('resize', () => { clearTimeout(_resizeT); _resizeT = setTimeout(refit, 150); });
   window.addEventListener('orientationchange', () => setTimeout(refit, 300));
+  // HUD 버튼 아이콘 SVG (이모지 대신 — 어느 브라우저서나 동일 크기, No.1 ②)
+  const SVG_SOUND_ON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="4 9 4 15 8 15 13 19 13 5 8 9" fill="currentColor" stroke="none"/><path d="M16 8.5a3.5 3.5 0 0 1 0 7"/><path d="M18.8 5.7a7 7 0 0 1 0 12.6"/></svg>';
+  const SVG_SOUND_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="4 9 4 15 8 15 13 19 13 5 8 9" fill="currentColor" stroke="none"/><line x1="16" y1="9.5" x2="21" y2="14.5"/><line x1="21" y1="9.5" x2="16" y2="14.5"/></svg>';
+  const SVG_FS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
 
   const scoreEl = document.getElementById('score');
   const bestEl = document.getElementById('best');
@@ -1000,6 +1017,18 @@
   // 점수 표시 — 즉시 갱신, 폭발적 득점(클라이맥스) 땐 자리수가 각개로 펑펑
   let scoreDigitEls = [];
   let recentGain = 0, digitBurstUntil = 0;
+  // 점수가 가용 폭을 넘으면 자동 축소 (넘침 방지, No.1 ③)
+  function fitScore() {
+    const wrap = scoreEl.parentElement;
+    if (!wrap) return;
+    scoreEl.style.fontSize = ''; // CSS clamp 기준으로 리셋
+    const avail = wrap.clientWidth - (livesEl.offsetWidth || 0) - 30;
+    const w = scoreEl.offsetWidth;
+    if (w > avail && avail > 40) {
+      const cur = parseFloat(getComputedStyle(scoreEl).fontSize) || 40;
+      scoreEl.style.fontSize = Math.max(18, cur * avail / w) + 'px';
+    }
+  }
   function renderScore(v) {
     const s = String(v);
     if (scoreDigitEls.length !== s.length) {
@@ -1012,6 +1041,7 @@
         scoreEl.appendChild(d);
         scoreDigitEls.push(d);
       }
+      fitScore(); // 자리수 바뀌면 폭에 맞춰 자동 축소
       return;
     }
     for (let i = 0; i < s.length; i++) {
@@ -2852,8 +2882,8 @@
   const ammoRapidEl = document.getElementById('ammoRapid');
   const ammoBombEl = document.getElementById('ammoBomb');
   for (let i = 0; i < 5; i++) {
-    ammoRapidEl.appendChild(document.createElement('span')).textContent = '🔫';
-    ammoBombEl.appendChild(document.createElement('span')).textContent = '💣';
+    const r = document.createElement('span'); r.className = 'cell rapid'; ammoRapidEl.appendChild(r);
+    const b = document.createElement('span'); b.className = 'cell bomb'; ammoBombEl.appendChild(b);
   }
   let lastAmmoR = -1, lastAmmoB = -1;
   function updateAmmoPanel() {
@@ -3248,6 +3278,7 @@
     } catch (e) {}
   }
   const fsBtn = document.getElementById('fsBtn');
+  fsBtn.innerHTML = SVG_FS;
   // 전체화면 미지원(아이폰 등)이면 버튼 숨겨 오해 방지
   const _fsSupported = document.fullscreenEnabled || document.webkitFullscreenEnabled ||
     !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
@@ -3260,13 +3291,14 @@
 
   // 음소거 토글 (BGM + 효과음 전체)
   const muteBtn = document.getElementById('muteBtn');
+  muteBtn.innerHTML = muted ? SVG_SOUND_OFF : SVG_SOUND_ON;
   muteBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     ensureAudio();
     muted = !muted;
     if (masterGain) masterGain.gain.value = muted ? 0 : 1;
     if (!muted && audio) bgmNextTime = audio.currentTime + 0.1; // 밀린 스텝 몰아치기 방지
-    muteBtn.textContent = muted ? '🔇' : '🔊';
+    muteBtn.innerHTML = muted ? SVG_SOUND_OFF : SVG_SOUND_ON;
     muteBtn.blur();
   });
 
