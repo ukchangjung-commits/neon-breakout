@@ -539,8 +539,8 @@
   function demoBeginTransition() { if (demoFadeDir === 0) { demoFadeDir = 1; demoFadeAction = 'level'; } }
   function demoBeginRestart() { demoFadeDir = 1; demoFadeAction = 'restart'; } // 20초 데모 종료 — 진행 중 페이드도 덮어씀
   function updateDemoFade() {
-    if (demoFadeDir === 1) {                       // 아웃 — 어두워짐 (~0.5초)
-      demoFade = Math.min(1, demoFade + 0.033);
+    if (demoFadeDir === 1) {                       // 아웃 — 어두워짐 (~1초, 60Hz=60스텝)
+      demoFade = Math.min(1, demoFade + 1 / 60);
       if (demoFade >= 1) {                         // 암전 순간 — 항상 다음 레벨로 (다양한 판 + 보스 등장)
         demoNL = (demoNL + 1) % DEMO_LEVELS.length;
         state.level = DEMO_LEVELS[demoNL];
