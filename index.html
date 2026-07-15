@@ -1926,7 +1926,7 @@
     if (CI_IMG.complete && CI_IMG.naturalWidth) {
       for (const s of ciStars) {
         const grad = 1 - (s.y / (H * CI_ZONE)) * 0.8; // 최상단 100% → 경계 20% (부드럽게 소멸)
-        let a = 0.055 * grad;                          // 평소 — 은은한 고정 밝기
+        let a = 0.085 * grad;                          // 평소 — 은은한 고정 밝기
         const fl = (state.tick + s.seed) % s.per;      // 별마다 다른 주기·타이밍
         if (fl < 50) a += 0.24 * grad * Math.sin((fl / 50) * Math.PI); // 반짝! — 또렷하게 밝아졌다 원상태로
 
@@ -2007,30 +2007,46 @@
     // 낙하물 (아이템 캡슐 / 위험 폭탄 / 하트)
     for (const d of state.drops) {
       if (d.heart) {
-        // 하트 — 아이템 중 최대 크기, 반짝이며 낙엽처럼 기울어져 낙하
+        // 하트 — 아이템 중 최대 크기, 외부 광륜 + 반짝이며 낙엽처럼 기울어져 낙하
         const pulse = 1 + 0.15 * Math.sin(d.t * 0.12);            // 두근두근
         const tw = 0.65 + 0.35 * Math.sin(d.t * 0.22);            // 반짝임
         const tilt = Math.cos(d.t * 0.05 + d.ph) * 0.35;          // 흔들림에 맞춰 기울기
+        const hc = d.blue ? '#3fa9ff' : '#ff5577'; // 파란 하트 = 실드
+        const rgb = d.blue ? '63,169,255' : '255,85,119';
+        // 외부 광륜 (halo) — 하트 뒤에서 크게 빤짝빤짝
+        const haloR = 46 * (0.85 + 0.35 * tw);
+        const hg = ctx.createRadialGradient(d.x, d.y, 4, d.x, d.y, haloR);
+        hg.addColorStop(0, 'rgba(' + rgb + ',' + (0.55 * tw).toFixed(3) + ')');
+        hg.addColorStop(0.5, 'rgba(' + rgb + ',' + (0.22 * tw).toFixed(3) + ')');
+        hg.addColorStop(1, 'rgba(' + rgb + ',0)');
+        ctx.fillStyle = hg;
+        ctx.beginPath();
+        ctx.arc(d.x, d.y, haloR, 0, Math.PI * 2);
+        ctx.fill();
         ctx.save();
         ctx.translate(d.x, d.y);
         ctx.rotate(tilt);
-        const hc = d.blue ? '#3fa9ff' : '#ff5577'; // 파란 하트 = 실드
         ctx.globalAlpha = tw;
         ctx.fillStyle = hc;
         ctx.shadowColor = hc;
-        ctx.shadowBlur = 18 + 12 * tw;
+        ctx.shadowBlur = 26 + 20 * tw; // 외곽 글로우 강화
         ctx.font = 'bold ' + Math.round(36 * pulse) + 'px Consolas, monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText('♥', 0, 0);
-        // 주기적 흰 스파클 ✦
-        if (d.t % 55 < 14) {
-          ctx.globalAlpha = Math.sin(((d.t % 55) / 14) * Math.PI);
+        ctx.fillText('♥', 0, 0); // 두 번 그려 글로우 더 밝게
+        // 주기적 흰 스파클 ✦ — 크고 밝게, 대각 두 방향
+        const sc = d.t % 48;
+        if (sc < 16) {
+          const sa = Math.sin((sc / 16) * Math.PI);
+          ctx.globalAlpha = sa;
           ctx.fillStyle = '#ffffff';
           ctx.shadowColor = '#ffffff';
-          ctx.shadowBlur = 10;
-          ctx.font = 'bold 15px Consolas, monospace';
-          ctx.fillText('✦', 15, -15);
+          ctx.shadowBlur = 16;
+          ctx.font = 'bold ' + Math.round(22 * sa) + 'px Consolas, monospace';
+          ctx.fillText('✦', 20, -18);
+          ctx.font = 'bold ' + Math.round(14 * sa) + 'px Consolas, monospace';
+          ctx.fillText('✦', -20, 14);
         }
         ctx.textBaseline = 'alphabetic';
         ctx.shadowBlur = 0;
@@ -2151,7 +2167,8 @@
       const rgb = flash > 0 ? '207,234,255' : '63,169,255';
       const sg = ctx.createLinearGradient(0, scy - R, 0, scy);
       sg.addColorStop(0, 'rgba(' + rgb + ',1)');
-      sg.addColorStop(0.65, 'rgba(' + rgb + ',0.45)');
+      sg.addColorStop(0.4, 'rgba(' + rgb + ',0.55)');
+      sg.addColorStop(0.7, 'rgba(' + rgb + ',0)'); // 하단 30%는 완전 투명
       sg.addColorStop(1, 'rgba(' + rgb + ',0)');
       ctx.save();
       ctx.globalAlpha = expiring ? 0.22 : Math.min(1, shimmer + flash * 0.55);
@@ -2910,8 +2927,8 @@
         touchEntryTimer(); // 드래그도 동작 — 20초로 리셋
         const dy = pt.y - entryDrag.lastY;
         entryDrag.lastY = pt.y;
-        entryPos[entryDrag.slot] += dy / 42;   // 42px = 한 글자
-        entryVel[entryDrag.slot] = dy / 42;    // 마지막 속도 = 관성
+        entryPos[entryDrag.slot] -= dy / 42;   // 글자가 손가락과 같은 방향으로 (42px = 한 글자)
+        entryVel[entryDrag.slot] = -dy / 42;   // 마지막 속도 = 관성
         canvas.style.cursor = 'grabbing';
         return;
       }
@@ -2943,8 +2960,8 @@
       const pt = canvasPoint(e);
       const dy = pt.y - entryDrag.lastY;
       entryDrag.lastY = pt.y;
-      entryPos[entryDrag.slot] += dy / 42;
-      entryVel[entryDrag.slot] = dy / 42;
+      entryPos[entryDrag.slot] -= dy / 42; // 손가락과 같은 방향
+      entryVel[entryDrag.slot] = -dy / 42;
       return;
     }
     if (state.mode === 'play' || state.mode === 'ready') e.preventDefault();
