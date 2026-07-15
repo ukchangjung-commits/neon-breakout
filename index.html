@@ -475,17 +475,6 @@
   // ---- 난이도 스케일링 — 12지신 색동 단계(보스 48마리 = 1단계)에 비례 ----
   // 시작 화면에서 1~10단계 수동 선택 가능 (null = 자동: 이니셜 진행 기반)
   let manualStage = null;
-  // 데모 패들 크기 시연 — 축소→최소(단총)→회복→확장(최대) 순환 (기존 정의 사이즈 사용)
-  let demoPadT = 0, demoPadStep = 0;
-  const DEMO_PAD_SEQ = [
-    { g: 0, h: 0, n: 0 }, // 정상
-    { g: 0, h: 1, n: 0 }, // ½ — 폭탄 피격
-    { g: 0, h: 2, n: 0 }, // ¼
-    { g: 0, h: 2, n: 1 }, // 최소 + 총알 1발
-    { g: 0, h: 1, n: 0 }, // ½ — 회복
-    { g: 0, h: 0, n: 0 }, // 정상 — 수리
-    { g: 1, h: 0, n: 0 }, // 확장(최대) — W 아이템
-  ];
   {
     const savedStage = safeStore.get('neon-breakout-stage', null);
     if (savedStage !== null && savedStage !== 'auto') {
@@ -1468,7 +1457,14 @@
     state.freeze = 25;  // 히트스톱 — 게임이 잠깐 멈춰서 확실히 인지
     sfx.bombOuch();     // 퍼~엉 + 엌!
     triggerJackpot();   // 12지신 잭팟 스핀
-    if (state.attract) return; // 데모 — 피해 없음 (패들 크기 시연은 별도 순환이 담당)
+    if (state.attract) {
+      // 데모(교육) — 폭탄 맞으면 실제로 축소: 정상→½→¼, ¼에서 또 맞으면 하트 1개 잃고 새 패들 (게임오버 없음)
+      state.bombHits++;
+      if (state.bombHits >= 3) { state.bombHits = 0; state.deaths++; if (state.lives > 1) state.lives--; }
+      updatePaddleWidth();
+      updateHud();
+      return;
+    }
     state.bombHits++;
     if (state.bombHits === 1) {
       updatePaddleWidth();
@@ -1568,18 +1564,14 @@
 
     // 데모 AI — 완급: 초보(비틀비틀) → 프로(칼컨트롤) → 잭팟(축제)
     if (state.attract) {
-      // 패들 크기 시연 — 축소→최소(단총)→회복→확장(최대) 계속 순환
-      if (++demoPadT >= 72) {
-        demoPadT = 0;
-        demoPadStep = (demoPadStep + 1) % DEMO_PAD_SEQ.length;
-        const ps = DEMO_PAD_SEQ[demoPadStep];
-        state.bombHits = ps.h; state.grow = ps.g; state.buffs.narrow = ps.n ? 600 : 0;
-        updatePaddleWidth();
+      // 교육용 — 가끔 하트를 떨궈 '하트 먹기(목숨 +1)'도 보여줌
+      if (state.tick % 780 === 200) {
+        spawnHeartDrop(W / 2 + (Math.random() * 140 - 70), 92, Math.random() < 0.5 ? -1 : 1, Math.random() < 0.25);
       }
       const phase = getAttractPhase();
       if (phase !== attractPhase) {
         attractPhase = phase;
-        if (phase === 'novice') { state.score = 0; recentGain = 0; } // 새 사이클 — 점수 리셋
+        if (phase === 'novice') { state.score = 0; recentGain = 0; state.lives = 5; state.deaths = 0; state.bombHits = 0; state.grow = 0; updatePaddleWidth(); } // 새 사이클 — 초기화(패들·목숨 리셋)
         if (phase === 'jackpot') { confettiBlast(); triggerJackpot(); }
       }
       // 1순위: 내려오는 공 추적 (생존)
