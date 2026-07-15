@@ -1353,10 +1353,8 @@
       if (ph === 'pro' && t >= 1320) {
         // 프로 뒷부분 — 모든 아이템(폭탄·4줄·연사·확장·멀티볼·에너지·보호막)을 하나씩 자연스럽게 흘려 잭팟 전에 다 모으게
         if (Math.random() < 0.175) {
-          const arsenal = ['bomb', 'quad', 'rapid', 'wide', 'multi', 'energy', 'shield'];
-          const key = arsenal[proArsenalIdx++ % arsenal.length];
-          if (key === 'shield') spawnHeartDrop(cx, cy, Math.random() < 0.5 ? -1 : 1, true); // 파란 하트 = 보호막
-          else spawnItem(cx, cy, key);
+          const arsenal = ['bomb', 'quad', 'rapid', 'wide', 'multi', 'energy']; // 보호막은 프로 시작에 따로 투하
+          spawnItem(cx, cy, arsenal[proArsenalIdx++ % arsenal.length]);
         }
         return;
       }
@@ -1647,7 +1645,7 @@
       if (phase !== attractPhase) {
         const prevPhase = attractPhase;
         attractPhase = phase;
-        if (phase === 'pro') proArsenalIdx = 0; // 프로 뒷부분 아이템 흘리기 순서 초기화
+        if (phase === 'pro') { proArsenalIdx = 0; triggerCiHeartDrop(false, true); } // 순서 초기화 + 보호막(파란 하트) 즉시 투하 → 잭팟까지 유지
         if (phase === 'jackpot') { confettiBlast(); triggerJackpot(); }
         if (phase === 'novice' && prevPhase === 'jackpot') demoBeginRestart(); // 20초 데모 종료 → 빠른 페이드 후 새 데모
       }
@@ -1889,11 +1887,11 @@
         if (d.heart) { // 하트 — 분홍: 목숨 +1 / 파랑: 프로토스 실드 15초
           state.drops.splice(i, 1);
           if (d.blue) {
-            state.shield = 420; // 7초
+            state.shield = state.attract ? 900 : 420; // 데모 15초(프로 시작~잭팟까지) / 실플레이 7초
             state.shieldFlash = 10;
             sfx.shieldOn();
             spawnParticles(d.x, H - 40, '#3fa9ff', 26, 1.8);
-            showToast('🛡 보호막! 7초', '#3fa9ff');
+            showToast(state.attract ? '🛡 보호막!' : '🛡 보호막! 7초', '#3fa9ff');
           } else {
             state.lives++;
             updateHud();
