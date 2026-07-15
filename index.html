@@ -119,7 +119,7 @@
   }
   /* ---- 도움말 버튼 & 패널 ---- */
   .cabinet { position: relative; }
-  #helpBtn, #muteBtn, #fsBtn {
+  #helpBtn, #muteBtn, #fsBtn, #exitBtn {
     width: clamp(32px, calc(var(--uw, 100vw) * 0.072), 60px);
     height: clamp(32px, calc(var(--uw, 100vw) * 0.072), 60px);
     border: 1px solid var(--line);
@@ -133,6 +133,8 @@
     display: flex; align-items: center; justify-content: center;
   }
   #muteBtn svg, #fsBtn svg { width: 56%; height: 56%; display: block; }
+  #exitBtn { width: auto; padding: 0 clamp(6px, calc(var(--uw, 100vw) * 0.014), 14px); color: #ff5577; font-size: clamp(11px, calc(var(--uw, 100vw) * 0.022), 16px); text-shadow: 0 0 8px rgba(255, 85, 119, 0.6); }
+  #exitBtn:hover { border-color: #ff5577; box-shadow: 0 0 10px rgba(255, 85, 119, 0.4); }
   #helpBtn:hover, #muteBtn:hover, #fsBtn:hover { border-color: var(--cyan); box-shadow: 0 0 10px rgba(34, 230, 255, 0.35); }
   .help-panel {
     display: none;
@@ -343,6 +345,7 @@
       <button id="muteBtn" title="소리 켜기/끄기" aria-label="음소거"></button>
       <button id="fsBtn" title="전체 화면 (F)" aria-label="전체 화면"></button>
       <button id="helpBtn" title="조작법 보기" aria-label="도움말">?</button>
+      <button id="exitBtn" title="게임 종료 (시작화면으로)" aria-label="종료">EXIT</button>
     </div>
   </div>
   <div class="screen"><canvas id="game" width="720" height="900"></canvas></div>
@@ -2711,15 +2714,8 @@
       drawUiButton(startBtnRect(), '▶ START (Space)', '#22e6ff');
       drawUiButton(recordsBtnRect(), '🏆 기록 보기', '#ffc233');
 
-      // 난이도 단계 선택 (1~10 라운드 사각형)
-      ctx.fillStyle = '#5f7396';
-      ctx.font = '13px Menlo, Consolas, monospace';
+      // 난이도 단계 선택 (1~10 라운드 사각형) — 안내 문구는 박스 아래(아이템 제목 자리)로 이동
       ctx.textAlign = 'center';
-      ctx.fillText(
-        manualStage === null
-          ? '난이도 — 클릭으로 선택 (현재: 자동 ' + (diffStage() + 1) + '단계)'
-          : '난이도 — ' + (manualStage + 1) + '단계 선택됨 (다시 누르면 자동)',
-        W / 2, H / 2 + 90);
       for (let i = 0; i < 10; i++) {
         const r = stageBoxRect(i);
         const sel = manualStage === i;
@@ -2744,7 +2740,7 @@
       if (ph === 'jackpot') {
         const jp = 1 + Math.sin(state.tick * 0.25) * 0.12;
         ctx.save();
-        ctx.translate(W / 2, H / 2 - 80);
+        ctx.translate(W / 2, H / 2 - 132); // DEMO 캡션·토스트와 겹치지 않게 위로
         ctx.scale(jp, jp);
         ctx.fillStyle = '#ffc233';
         ctx.shadowColor = '#ffc233';
@@ -2773,7 +2769,12 @@
       const legendY = H / 2 + 205;
       ctx.fillStyle = '#5f7396';
       ctx.font = '13px Menlo, Consolas, monospace';
-      ctx.fillText('— 아이템 안내 —', W / 2, legendY - 28);
+      ctx.textAlign = 'center';
+      ctx.fillText(
+        manualStage === null
+          ? '난이도 — 클릭으로 선택 (현재: 자동 ' + (diffStage() + 1) + '단계)'
+          : '난이도 — ' + (manualStage + 1) + '단계 선택됨 (다시 누르면 자동)',
+        W / 2, legendY - 28);
       ctx.font = 'bold 15px Menlo, Consolas, monospace';
       ctx.textAlign = 'left';
       for (let i = 0; i < LEGEND.length; i++) {
@@ -2786,9 +2787,12 @@
       // 랭킹 TOP 3 (하단 한 줄) — 글로벌 우선, 없으면 로컬
       const ranks = (cloudTop && cloudTop.length ? cloudTop : localTopCache).slice(0, 3);
       if (ranks.length) {
-        ctx.fillStyle = '#5f7396';
-        ctx.font = '13px Menlo, Consolas, monospace';
-        ctx.fillText(fdb ? '— 🏆 글로벌 랭킹 TOP 3 —' : '— 🏆 랭킹 TOP 3 —', W / 2, H - 102);
+        ctx.fillStyle = '#ffd700';
+        ctx.shadowColor = '#ffd700';
+        ctx.shadowBlur = 12;
+        ctx.font = 'bold 26px Menlo, Consolas, monospace';
+        ctx.fillText('T O P 3', W / 2, H - 104);
+        ctx.shadowBlur = 0;
         const medals = ['🥇', '🥈', '🥉'];
         const rankColors = ['#ffd700', '#c0c0c0', '#cd7f32'];
         const spread = Math.min(240, (W - 160) / 3); // 화면 폭에 맞춰 간격
@@ -3257,6 +3261,14 @@
     e.stopPropagation();
     helpPanel.classList.toggle('open');
     helpBtn.blur(); // Space가 버튼을 다시 누르지 않게
+  });
+
+  // EXIT — 게임 중 종료하고 시작(데모) 화면으로
+  const exitBtn = document.getElementById('exitBtn');
+  exitBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!state.attract) enterAttract();
+    exitBtn.blur();
   });
 
   // 전체 화면 토글 — F 키 / ⛶ 버튼 (노션 임베드에서 크게 보기)
