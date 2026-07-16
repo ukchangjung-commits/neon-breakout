@@ -508,10 +508,10 @@
   let recordsOpen = false, recordsList = [], simMenu = false, selRecordIdx = -1, recDrag = null;
   function startBtnRect() { const w = Math.min(210, W * 0.34); return { x: W / 2 - w - 8, y: H / 2 + 36, w: w, h: 46 }; }
   function recordsBtnRect() { const w = Math.min(210, W * 0.34); return { x: W / 2 + 8, y: H / 2 + 36, w: w, h: 46 }; }
-  function recordsCloseRect() { const w = Math.min(320, W - 40); return { x: W / 2 - w / 2, y: H - 58, w: w, h: 44 }; }
+  function recordsCloseRect() { const w = Math.min(600, W - 36); return { x: W / 2 - w / 2, y: H - 58, w: w, h: 44 }; } // 표(벽돌 그리드)와 동일 폭
   // ==== 글로벌 랭킹 인터랙티브 (보스 패트롤 + 폭탄 소트 + 방어모드) — 열리면 뒤 게임(데모)은 자동 포즈 ====
   let selRecordName = null;
-  const rankViz = { order: [], bossCol: 2, bossX: 0, dir: 1, timer: 600, mode: 'patrol', defendT: 0, shields: 0, parts: 0, bombs: [], brokenT: [0, 0, 0, 0, 0, 0], flash: 0, t: 0, hurt: 0, pad: { x: 0, vx: 2.2, w: 46, hurt: 0, shootT: 180 }, shots: [] };
+  const rankViz = { order: [], bossCol: 2, bossX: 0, dir: 1, timer: 600, mode: 'patrol', defendT: 0, shields: 0, parts: 0, bombs: [], brickT: [], flash: 0, t: 0, hurt: 0, hitT: 900, pad: { x: 0, vx: 2.2, w: 46, hurt: 0, shootT: 180, muzzle: 0 }, shots: [] };
   const RANK_COL_LABELS = ['RANK', 'INITIAL', 'BEST', 'TOTAL', 'LEVEL', 'DATE'];
   function rankLayout() {
     const tableW = Math.min(600, W - 36);
@@ -563,9 +563,10 @@
     rankViz.order.forEach(function (r, i) { r._slot = i; r._ry = L.rowTop + i * L.rowH; });
     rankViz.bossCol = 2; rankViz.dir = 1; rankViz.timer = 600; rankViz.mode = 'patrol';
     rankViz.shields = 0; rankViz.parts = 0; rankViz.bombs = []; rankViz.flash = 0; rankViz.defendT = 0;
-    rankViz.brokenT = [0, 0, 0, 0, 0, 0]; rankViz.t = 0; rankViz.hurt = 0;
+    rankViz.brickT = new Array(17).fill(0); rankViz.t = 0; rankViz.hurt = 0;
     rankViz.bossX = L.cols[2].cx;
-    rankViz.pad.x = W / 2; rankViz.pad.hurt = 0; rankViz.pad.shootT = 180; rankViz.shots = [];
+    rankViz.pad.x = W / 2; rankViz.pad.hurt = 0; rankViz.pad.shootT = 180; rankViz.pad.muzzle = 0; rankViz.shots = [];
+    rankViz.hitT = 600 + Math.floor(Math.random() * 600); // 패들 피격 연출 — 10~20초 간격
   }
   function rankSortBy(col) {
     const fn = RANK_SORTS[col]; if (!fn) return;
@@ -603,7 +604,7 @@
     rankViz.t++;
     if (rankViz.flash > 0) rankViz.flash--;
     if (rankViz.hurt > 0) rankViz.hurt--;
-    for (let c = 0; c < 6; c++) if (rankViz.brokenT[c] > 0) rankViz.brokenT[c]--;
+    for (let k = 0; k < 17; k++) if (rankViz.brickT[k] > 0) rankViz.brickT[k]--;
     rankViz.bossX += (L.cols[rankViz.bossCol].cx - rankViz.bossX) * 0.18;
     if (rankViz.mode === 'patrol') {
       if (--rankViz.timer <= 0) {
@@ -630,8 +631,10 @@
       const b = rankViz.bombs[i];
       b.y += b.vy;
       if (rankViz.t % 4 === 0) spawnParticles(b.x, b.y, '#ffc233', 3, 1.1);
-      if (!b.broke && b.y >= L.brickY + 4) { // 벽돌 줄 파괴 — 펑!
-        b.broke = true; rankViz.brokenT[b.col] = 80;
+      if (!b.broke && b.y >= L.brickY + 4) { // 폭탄 — 그 컬럼 벽돌 전체 펑!
+        b.broke = true;
+        const bc = L.cols[b.col];
+        for (let k = 0; k < bc.bricks; k++) rankViz.brickT[bc.b0 + k] = 90;
         spawnParticles(b.x, L.brickY + 7, ROW_COLORS[b.col % ROW_COLORS.length], 20, 2);
         if (sfx.brick) sfx.brick();
       }
@@ -645,6 +648,7 @@
           spawnParticles(b.x, L.padY - 6, '#ff5555', 26, 2.2);
           spawnParticles(b.x, L.padY - 6, '#ffc233', 16, 1.8);
           rankViz.pad.hurt = 20;
+          rankViz.hitT = 600 + Math.floor(Math.random() * 600); // 다음 피격 연출 — 10~20초 후
           if (sfx.bombOuch) sfx.bombOuch(); else if (sfx.boom) sfx.boom();
         } else {
           spawnParticles(b.x, L.padY - 2, '#ffc233', 8, 1.2); // 빗나감 — 바닥에서 팟
@@ -652,39 +656,60 @@
         rankViz.bombs.splice(i, 1);
       }
     }
-    // 하단 패들 — 게임 데모처럼 떨어지는 폭탄을 쫓고, 없으면 좌우 왕복
+    // 하단 패들 — 평소엔 회피/왕복, 10~20초마다(hitT 만료) 일부러 폭탄을 받아 펑! 연출
     const pad = rankViz.pad;
+    if (rankViz.hitT > 0) rankViz.hitT--;
+    if (pad.muzzle > 0) pad.muzzle--;
     let tb = null;
     for (const b of rankViz.bombs) if (!tb || b.y > tb.y) tb = b;
-    if (tb) {
-      pad.x += Math.max(-3.2, Math.min(3.2, (tb.x - pad.x) * 0.08));
+    if (tb && rankViz.hitT <= 0) {
+      pad.x += Math.max(-3.2, Math.min(3.2, (tb.x - pad.x) * 0.08)); // 피격 연출 — 폭탄 아래로 들어가 받아냄
+    } else if (tb && tb.y > L.listTop && Math.abs(tb.x - pad.x) < 70) {
+      pad.x += (tb.x > pad.x ? -1 : 1) * 2.6; // 평소 — 회피
+      pad.x = Math.max(L.x0 + 30, Math.min(L.x0 + L.tableW - 30, pad.x));
     } else {
       pad.x += pad.vx;
       if (pad.x < L.x0 + 30) { pad.x = L.x0 + 30; pad.vx = Math.abs(pad.vx); }
       if (pad.x > L.x0 + L.tableW - 30) { pad.x = L.x0 + L.tableW - 30; pad.vx = -Math.abs(pad.vx); }
     }
     if (pad.hurt > 0) pad.hurt--;
-    if (--pad.shootT <= 0) { // 간혹 총 발사 (2~4.5초 간격)
+    if (--pad.shootT <= 0) { // 간혹 총 발사 (2~4.5초) — 양쪽 포탑에서, 피격 연출 대기 중엔 안 쏨
       pad.shootT = 120 + Math.floor(Math.random() * 150);
-      const n = 1 + Math.floor(Math.random() * 3);
-      for (let k = 0; k < n; k++) rankViz.shots.push({ x: pad.x - 10 + k * 10, y: L.padY - 10 });
-      if (sfx.shoot) sfx.shoot();
+      if (rankViz.hitT > 0) {
+        pad.muzzle = 8;
+        rankViz.shots.push({ x: pad.x - pad.w / 2 + 5, y: L.padY - 10 });
+        rankViz.shots.push({ x: pad.x + pad.w / 2 - 5, y: L.padY - 10 });
+        if (sfx.shoot) sfx.shoot();
+      }
     }
-    for (let i = rankViz.shots.length - 1; i >= 0; i--) { // 총알 — 폭탄 격추 시 게임처럼 팝
+    for (let i = rankViz.shots.length - 1; i >= 0; i--) { // 총알 — 폭탄 격추 + 벽돌 하나씩 격파
       const s = rankViz.shots[i];
       s.y -= 9;
       let hit = false;
-      for (let j = rankViz.bombs.length - 1; j >= 0; j--) {
-        const b = rankViz.bombs[j];
-        if (Math.abs(b.x - s.x) <= 12 && Math.abs(b.y - s.y) <= 12) {
-          spawnParticles(b.x, b.y, '#ff5555', 14, 1.6);
-          if (sfx.pop) sfx.pop();
-          rankViz.bombs.splice(j, 1);
-          hit = true;
-          break;
+      if (rankViz.hitT > 0) { // 피격 연출 중인 폭탄은 격추하지 않음
+        for (let j = rankViz.bombs.length - 1; j >= 0; j--) {
+          const b = rankViz.bombs[j];
+          if (Math.abs(b.x - s.x) <= 12 && Math.abs(b.y - s.y) <= 12) {
+            spawnParticles(b.x, b.y, '#ff5555', 14, 1.6);
+            if (sfx.pop) sfx.pop();
+            rankViz.bombs.splice(j, 1);
+            hit = true;
+            break;
+          }
         }
       }
-      if (hit || s.y < L.listTop - 20) rankViz.shots.splice(i, 1);
+      if (!hit && s.y <= L.brickY + L.brickH && s.y > L.brickY - 5) { // 벽돌 줄 도달 — 정확히 1개 격파
+        const bi = Math.floor((s.x - L.x0) / (L.bw2 + L.bp));
+        if (bi >= 0 && bi < 17 && (s.x - L.x0) - bi * (L.bw2 + L.bp) <= L.bw2 && rankViz.brickT[bi] === 0) {
+          rankViz.brickT[bi] = 150;
+          let cc = 0;
+          for (let c2 = 0; c2 < 6; c2++) if (bi >= L.cols[c2].b0 && bi < L.cols[c2].b0 + L.cols[c2].bricks) cc = c2;
+          spawnParticles(s.x, L.brickY + 7, ROW_COLORS[cc % ROW_COLORS.length], 12, 1.5);
+          if (sfx.brick) sfx.brick();
+          hit = true;
+        }
+      }
+      if (hit || s.y < L.brickY - 10) rankViz.shots.splice(i, 1);
     }
     const maxScroll = Math.max(0, rankViz.order.length * L.rowH - L.listH);
     state.rankScroll = Math.max(0, Math.min(state.rankScroll, maxScroll));
@@ -863,13 +888,14 @@
       ctx.fillStyle = (c === rankViz.bossCol) ? '#ffc233' : '#8fa8cf';
       ctx.fillText(RANK_COL_LABELS[c], L.cols[c].cx, L.headY);
     }
-    // 벽돌 줄 — 등간격 그리드(컬럼 폭=벽돌 개수, 게임 비율 ≈1.9:1), 필드마다 색상, 게임과 동일한 네온 글로우
+    // 벽돌 줄 — 등간격 그리드(컬럼 폭=벽돌 개수, 게임 비율 ≈1.9:1), 필드마다 색상, 개별 파괴/재생
     for (let c = 0; c < 6; c++) {
-      if (rankViz.brokenT[c] > 0) continue; // 폭탄에 부서짐 — 잠시 후 재생
       const color = ROW_COLORS[c % ROW_COLORS.length];
       ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 8;
       for (let k = 0; k < L.cols[c].bricks; k++) {
-        ctx.fillRect(L.x0 + (L.cols[c].b0 + k) * (L.bw2 + L.bp), L.brickY, L.bw2, L.brickH);
+        const bi = L.cols[c].b0 + k;
+        if (rankViz.brickT[bi] > 0) continue; // 부서진 벽돌 — 잠시 후 재생
+        ctx.fillRect(L.x0 + bi * (L.bw2 + L.bp), L.brickY, L.bw2, L.brickH);
       }
       ctx.shadowBlur = 0;
     }
@@ -879,7 +905,7 @@
     for (let i = 0; i < rankViz.order.length; i++) {
       const r = rankViz.order[i];
       const y = (r._ry != null ? r._ry : (L.rowTop + r._slot * L.rowH)) - state.rankScroll;
-      if (y < L.listTop - 6 || y > L.listTop + L.listH + L.rowH) continue;
+      if (y - L.rowH + 8 < L.listTop - 2 || y + 6 > L.listTop + L.listH) continue; // 경계에 걸친 행은 통째로 숨김 (잘린 표시 방지)
       const rank = r._slot + 1;
       const medal = rank === 1 ? '#ffd700' : rank === 2 ? '#c0c0c0' : rank === 3 ? '#cd7f32' : '#cfe6ff';
       if (r.name === selRecordName) { ctx.fillStyle = 'rgba(46,255,200,0.16)'; ctx.fillRect(L.x0, y - L.rowH + 8, L.tableW, L.rowH - 3); }
@@ -903,10 +929,17 @@
       const b = rankViz.bombs[i];
       drawBombShape(b.x, b.y, b.y);
     }
-    // 하단 패들 미니 연출 — 게임과 동일한 네온 패들 + 총알 트레이서
-    ctx.fillStyle = rankViz.pad.hurt > 0 ? '#ffffff' : '#22e6ff';
-    ctx.shadowColor = '#22e6ff'; ctx.shadowBlur = 12;
-    ctx.beginPath(); ctx.roundRect(rankViz.pad.x - rankViz.pad.w / 2, L.padY - 5, rankViz.pad.w, 9, 5); ctx.fill();
+    // 하단 패들 — 게임 패들과 동일: 각진 몸통(세로 6px) + 앰버 포탑 2개 + 총구 플래시
+    const pd = rankViz.pad;
+    ctx.fillStyle = pd.hurt > 0 ? '#ffffff' : '#22e6ff';
+    ctx.shadowColor = '#22e6ff'; ctx.shadowBlur = 14;
+    ctx.fillRect(pd.x - pd.w / 2, L.padY - 3, pd.w, 6);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = pd.muzzle > 0 ? '#fff6d0' : '#ffc233';
+    ctx.shadowColor = '#ffc233';
+    ctx.shadowBlur = pd.muzzle > 0 ? 16 : 6;
+    ctx.fillRect(pd.x - pd.w / 2 + 3, L.padY - 8, 4, 5);
+    ctx.fillRect(pd.x + pd.w / 2 - 7, L.padY - 8, 4, 5);
     ctx.shadowBlur = 0;
     ctx.fillStyle = '#8ff4ff';
     for (let i = 0; i < rankViz.shots.length; i++) {
