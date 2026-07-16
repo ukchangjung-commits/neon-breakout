@@ -751,19 +751,22 @@
       bgmNextTime = audio.currentTime + 0.1;
     }
   });
+  // 최대출력 발사음(폭탄레이저+고속연사+에너지충전) 부스트 토글 — false면 완전 원래 소리 (취소용, git revert로도 원복)
+  const SUPER_SFX = true;
   const sfx = {
     // 따발총 — 발마다 피치가 달라지는 '타타타' + 총구 타격 노이즈
     shoot:  () => {
       if (!audio) return;
       const t = audio.currentTime;
-      tone(750 + Math.random() * 350, t, 0.07, 'square', 0.096, -520);
-      noise(t, 0.035, 0.096, 3200);
+      tone(750 + Math.random() * 350, t, 0.07, 'square', 0.05, -520);
+      noise(t, 0.035, 0.05, 3200);
     },
     // 폭탄 레이저 발사 — 묵직한 '퉁!'
     bombShot: () => {
       if (!audio) return;
       const t = audio.currentTime;
-      const g = state.buffs.rapid > 0 ? 3 : 1; // 폭탄레이저 + 고속연사 겹칠 때 '두두두' 3배
+      // 최대출력: 폭탄레이저(발사중) + 고속연사 + 에너지충전(60%+) 겹칠 때만 '두두두' ×3, 그 외엔 원래 소리
+      const g = (SUPER_SFX && state.buffs.rapid > 0 && state.energy > state.energyMax * 0.6) ? 3 : 1;
       tone(190, t, 0.18, 'sine', 0.09 * g, -110);
       noise(t, 0.08, 0.05 * g, 700);
     },
@@ -774,9 +777,9 @@
     boom:   () => {
       if (!audio) return;
       const t = audio.currentTime;
-      noise(t, 0.4, 0.059, 900);
-      tone(95, t, 0.45, 'sawtooth', 0.042, -60);
-      tone(55, t, 0.5, 'sine', 0.05, -25);
+      noise(t, 0.4, 0.14, 900);
+      tone(95, t, 0.45, 'sawtooth', 0.1, -60);
+      tone(55, t, 0.5, 'sine', 0.12, -25);
     },
     // 아이템 획득 — 쉬이잉~↑ 경쾌한 상승 스윕 + 반짝임 + 마무리 '띵'
     item:   () => {
