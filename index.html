@@ -1040,8 +1040,21 @@
   }
   function inNewGameBtn(x, y) { return inBtn(NEWGAME_BTN, x, y); }
 
-  // ---- 이니셜 릴 (슬롯머신 방식) — 0~9 + A~Z = 36자, 드래그/휠 회전 ----
-  const ENTRY_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  // ---- 이니셜 릴 (슬롯머신 방식) — 0~9 + A~Z + 이모지(하트·트로피·폭탄·12지신) + 아이템 7종 = 59칸, 드래그/휠 회전 ----
+  // 아이템 토큰 — 게임 드롭(색 동그라미+색 글자)과 동일하게 릴에서 렌더. 이름엔 원문자(ⓆⓇ…)로 저장.
+  const ENTRY_ITEM_TOKENS = {
+    'Ⓠ': { letter: 'Q', color: '#ffc233' },  // 4줄 레이저
+    'Ⓡ': { letter: 'R', color: '#22e6ff' },  // 고속 연사
+    'Ⓑ': { letter: 'B', color: '#ff3df0' },  // 폭탄 레이저
+    'Ⓦ': { letter: 'W', color: '#2effc8' },  // 패들 확장
+    'Ⓔ': { letter: 'E', color: '#c95cff' },  // 에너지 충전
+    'Ⓜ': { letter: 'M', color: '#7f7bff' },  // 멀티볼
+    'Ⓢ': { letter: 'S', color: '#ff9a3d' },  // 패들 축소
+  };
+  const ENTRY_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
+    .concat(['💖', '💙', '🏆', '💣'])                                                      // 하트(빨강/파랑)·트로피·폭탄
+    .concat(['🐭', '🐮', '🐯', '🐰', '🐲', '🐍', '🐴', '🐑', '🐵', '🐔', '🐶', '🐷'])      // 12지신
+    .concat(Object.keys(ENTRY_ITEM_TOKENS));                                               // 아이템 7종
   const ENTRY_SLOT = { w: 62, h: 96, gap: 20, y: 392 };
   let entryPos = [10, 10, 10];  // 릴의 연속 위치 (10 = 'A')
   let entryVel = [0, 0, 0];     // 관성 속도
@@ -1069,9 +1082,10 @@
   }
   function entryNameNow() { return slotChar(0) + slotChar(1) + slotChar(2); }
   function initEntryReels() {
-    // 마지막 사용 이니셜에서 시작 (이어하기 친화)
+    // 마지막 사용 이니셜에서 시작 (이어하기 친화) — 이모지는 2코드유닛이라 Array.from으로 분해
+    const chs = Array.from(currentPlayer || '');
     for (let i = 0; i < 3; i++) {
-      const ci = ENTRY_CHARS.indexOf((currentPlayer[i] || 'A').toUpperCase());
+      const ci = ENTRY_CHARS.indexOf((chs[i] || 'A').toUpperCase());
       entryPos[i] = ci >= 0 ? ci : 10;
       entryVel[i] = 0;
     }
@@ -2918,10 +2932,23 @@
           const yy = r.y + r.h / 2 + (k - center) * 42 + 12;
           const dist = Math.abs(k - center);
           ctx.globalAlpha = Math.max(0.08, 1 - dist * 0.75);
-          ctx.fillStyle = dist < 0.5 ? '#22e6ff' : '#5f7396';
-          ctx.font = 'bold 36px Menlo, Consolas, monospace';
           ctx.textAlign = 'center';
-          ctx.fillText(ch, r.x + r.w / 2, yy);
+          const itm = ENTRY_ITEM_TOKENS[ch];
+          if (itm) { // 아이템 — 게임 드롭과 동일한 색 동그라미 + 색 글자
+            const cy = yy - 12;
+            ctx.strokeStyle = itm.color;
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.arc(r.x + r.w / 2, cy, 16, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.fillStyle = itm.color;
+            ctx.font = 'bold 20px Menlo, Consolas, monospace';
+            ctx.fillText(itm.letter, r.x + r.w / 2, cy + 7);
+          } else {
+            ctx.fillStyle = dist < 0.5 ? '#22e6ff' : '#5f7396';
+            ctx.font = 'bold 36px Menlo, Consolas, monospace';
+            ctx.fillText(ch, r.x + r.w / 2, yy);
+          }
         }
         ctx.globalAlpha = 1;
         ctx.restore();
@@ -2959,7 +2986,7 @@
       ctx.textAlign = 'center';
       ctx.fillStyle = '#5f7396';
       ctx.font = '14px Menlo, Consolas, monospace';
-      ctx.fillText('위아래 드래그·휠로 돌리기 (속도 감응) · 키보드 0~9 A~Z 직접 입력 · 동작 시 20초로 연장', W / 2, 512);
+      ctx.fillText('위아래 드래그·휠로 돌리기 · 키보드 0~9 A~Z · 하트·트로피·폭탄·12지신·아이템은 휠로 선택 · 동작 시 20초 연장', W / 2, 512);
 
       // 클릭 가능한 버튼 3개 — 저장 / 닫기 / 새 게임
       drawUiButton(ENTRY_SAVE_BTN, '✔ 저장 (Enter)', '#22e6ff');
