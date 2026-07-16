@@ -590,12 +590,19 @@
   }
   // 컬렉션 — 떨어진 순서대로 버튼 위 줄, 가득 차면 왼쪽(오래된 것)부터 좌하단 낙하 소멸
   function rankCollect(ch, big) {
-    rankViz.coll.push({ ch: ch, big: big });
+    rankViz.coll.push({ ch: ch, big: big, oy: 0, ovy: 0 });
     const L = rankLayout();
     const cap = Math.floor((L.tableW - 20) / 14);
     while (rankViz.coll.length > cap) {
       const old = rankViz.coll.shift();
-      rankViz.collDrop.push({ ch: old.ch, big: old.big, x: L.x0 + 10, y: (H - 58) - 8 + (old.big ? 0 : 3.2), vx: -1.6, vy: 1.2, a: 1 });
+      rankViz.collDrop.push({ // 폴짝 튀었다 왼쪽 포물선으로 데굴데굴 낙하 (코믹)
+        ch: old.ch, big: old.big,
+        x: L.x0 + 10, y: (H - 58) - 8 + (old.big ? 0 : 3.2),
+        vx: -(1.0 + Math.random() * 1.4),
+        vy: -(1.5 + Math.random() * 2.2),
+        rot: 0, rv: (Math.random() < 0.5 ? -1 : 1) * (0.12 + Math.random() * 0.25),
+        a: 1,
+      });
     }
   }
   function rankDropBomb(col) {
@@ -669,7 +676,8 @@
         if (sfx.pop) sfx.pop();
       }
       if (b.y >= L.padY - 6) { // 바닥 도달 — 패들에 맞으면 펑!
-        if (Math.abs(b.x - rankViz.pad.x) <= rankViz.pad.w / 2 + 8) {
+        const onPad = Math.abs(b.x - rankViz.pad.x) <= rankViz.pad.w / 2 + 8;
+        if (onPad) {
           spawnParticles(b.x, L.padY - 6, '#ff5555', 26, 2.2);
           spawnParticles(b.x, L.padY - 6, '#ffc233', 16, 1.8);
           rankViz.pad.hurt = 20;
@@ -677,6 +685,16 @@
           if (sfx.bombOuch) sfx.bombOuch(); else if (sfx.boom) sfx.boom();
         } else {
           spawnParticles(b.x, L.padY - 2, '#ffc233', 8, 1.2); // 빗나감 — 바닥에서 팟
+        }
+        // 폭발 충격파 — 근처 컬렉션 지신들 위로 튀어 올랐다 자기 자리로 (명중=넓게, 빗나감=좁게, 가까울수록 크게)
+        const bR = onPad ? 90 : 55;
+        for (let k = 0; k < rankViz.coll.length; k++) {
+          const cx4 = L.x0 + 10 + k * 14;
+          const dd = Math.abs(cx4 - b.x);
+          if (dd < bR) {
+            rankViz.coll[k].oy = rankViz.coll[k].oy || 0;
+            rankViz.coll[k].ovy = -(2 + Math.random() * 2.5) * (1 - (dd / bR) * 0.6);
+          }
         }
         rankViz.bombs.splice(i, 1);
       }
@@ -754,10 +772,16 @@
         rankViz.leaves.splice(i, 1);
       }
     }
-    for (let i = rankViz.collDrop.length - 1; i >= 0; i--) { // 줄 넘침 — 좌하단으로 낙하하며 페이드
+    for (let i = rankViz.collDrop.length - 1; i >= 0; i--) { // 줄 넘침 — 폴짝→포물선, 데굴데굴 회전 낙하
       const cd = rankViz.collDrop[i];
-      cd.x += cd.vx; cd.y += cd.vy; cd.vy += 0.12; cd.a -= 0.02;
-      if (cd.a <= 0 || cd.y > H + 20) rankViz.collDrop.splice(i, 1);
+      cd.x += cd.vx; cd.y += cd.vy; cd.vy += 0.18; cd.rot += cd.rv; cd.a -= 0.008;
+      if (cd.a <= 0 || cd.y > H + 30 || cd.x < -30) rankViz.collDrop.splice(i, 1);
+    }
+    for (let i = 0; i < rankViz.coll.length; i++) { // 폭발 충격파 — 튀었다 자기 자리로 복귀
+      const c4 = rankViz.coll[i];
+      if (!c4.ovy && !c4.oy) continue;
+      c4.ovy += 0.32; c4.oy += c4.ovy;
+      if (c4.oy >= 0) { c4.oy = 0; c4.ovy = 0; }
     }
     const maxScroll = Math.max(0, rankViz.order.length * L.rowH - L.listH);
     state.rankScroll = Math.max(0, Math.min(state.rankScroll, maxScroll));
@@ -1015,13 +1039,17 @@
     for (let i = 0; i < rankViz.coll.length; i++) {
       const c3 = rankViz.coll[i];
       ctx.font = (c3.big ? '12px' : '9.6px') + ' Menlo, Consolas, monospace';
-      ctx.fillText(c3.ch, L.x0 + 10 + i * 14, collY + (c3.big ? 0 : 3.2)); // 놓친 지신 — 자기 크기의 1/3 아래 배치
+      ctx.fillText(c3.ch, L.x0 + 10 + i * 14, collY + (c3.big ? 0 : 3.2) + (c3.oy || 0)); // 놓친 지신은 1/3 아래 + 충격파 튐 반영
     }
-    for (let i = 0; i < rankViz.collDrop.length; i++) { // 넘친 지신 — 좌하단 낙하 소멸
+    for (let i = 0; i < rankViz.collDrop.length; i++) { // 넘친 지신 — 데굴데굴 회전하며 포물선 낙하
       const d3 = rankViz.collDrop[i];
       ctx.globalAlpha = Math.max(0, d3.a);
       ctx.font = (d3.big ? '12px' : '9.6px') + ' Menlo, Consolas, monospace';
-      ctx.fillText(d3.ch, d3.x, d3.y);
+      ctx.save();
+      ctx.translate(d3.x, d3.y);
+      ctx.rotate(d3.rot);
+      ctx.fillText(d3.ch, 0, 0);
+      ctx.restore();
       ctx.globalAlpha = 1;
     }
     // 하단 패들 — 게임 패들과 동일: 각진 몸통(세로 6px) + 앰버 포탑 2개 + 총구 플래시
