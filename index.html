@@ -524,7 +524,10 @@
     applyBossTrophies();
     recordsOpen = false;
     requestLock();
-    startRealGame();
+    // 기록 이어하기(B안) — 레벨은 그 이니셜 최고기록에서 이어서, 점수는 0부터(저장 시 max 유지)
+    const list = (cloudAll && cloudAll.length) ? cloudAll : loadRecords();
+    const rec = list.find(r => (r.name || '???') === currentPlayer);
+    startRealGame(rec && rec.level ? rec.level : 1);
   }
   function diffStage() {
     if (manualStage !== null) return manualStage;
@@ -1499,15 +1502,7 @@
   function damageBoss(dmg, x, y) {
     const boss = state.boss;
     if (!boss) return;
-    // 보호막: 벽돌(체커 실드)이 남아 있는 동안 보스 무적. 다 깨지면 이전 설정 그대로.
-    if (state.bricks.length > 0) {
-      boss.hurt = 4;
-      spawnParticles(x, y, '#22e6ff', 8, 1.2);   // 실드 산란
-      state.shake = Math.max(state.shake, 2);
-      sfx.shieldHit();                            // '지잉' 실드 피격
-      return;                                     // 데미지·반사 모두 무효
-    }
-    // 자기색 눈(반사 모드) — 데미지 무효 + 데미지만큼 폭탄으로 반환 (최대 3개)
+    // 자기색 눈(반사 모드) — 데미지 무효 + 데미지만큼 폭탄으로 반환 (최대 3개). 실드 여부와 무관하게 먼저 적용.
     if (boss.reflect) {
       const n = Math.min(3, Math.max(1, dmg));
       for (let i = 0; i < n; i++) {
@@ -1519,6 +1514,14 @@
       state.shake = Math.max(state.shake, 4);
       sfx.reflect();
       return;
+    }
+    // 보호막: 벽돌(체커 실드)이 남아 있는 동안 보스 무적(반사 아니면 흡수). 다 깨지면 이전 설정 그대로.
+    if (state.bricks.length > 0) {
+      boss.hurt = 4;
+      spawnParticles(x, y, '#22e6ff', 8, 1.2);   // 실드 산란
+      state.shake = Math.max(state.shake, 2);
+      sfx.shieldHit();                            // '지잉' 실드 피격
+      return;                                     // 데미지 무효
     }
     boss.hp -= dmg;
     boss.hurt = 6;
@@ -1841,8 +1844,11 @@
       if (boss.x < 16 || boss.x + boss.w > W - 16) {
         boss.vx = -boss.vx;
         boss.x = Math.max(16, Math.min(W - 16 - boss.w, boss.x));
-        // 눈 색 룰렛 — 방향 바꿀 때마다 랜덤. 자기색(반사 모드): 실제 10% / 데모는 50%(교육용 자주 노출)
-        if (Math.random() < (state.attract ? 0.3 : 0.10)) {
+        // 눈 색 룰렛 — 방향 바꿀 때마다 랜덤. 벽돌(실드) 남으면 30%+5%/개(최대 100%), 다 깨지면 실제 10%/데모 30%
+        const reflectProb = state.bricks.length > 0
+          ? Math.min(1, 0.30 + 0.05 * state.bricks.length)
+          : (state.attract ? 0.3 : 0.10);
+        if (Math.random() < reflectProb) {
           boss.eyeColor = boss.tierColor;
           boss.reflect = true;
           sfx.reflectOn();
@@ -2091,8 +2097,8 @@
     const bx0 = boss.x, by0 = boss.y, bw0 = boss.w, bh0 = boss.h;
     const shielded = state.bricks.length > 0; // 벽돌(체커 실드) 남아 있으면 보스 무적
 
-    // 보호막 — 실드 벽돌이 남아 있는 동안 청록 돔 (무적 표시)
-    if (shielded) {
+    // 보호막 — 실드 벽돌이 남아 있고 반사 아닐 때 청록 돔 (무적 표시)
+    if (shielded && !boss.reflect) {
       const pz = 0.6 + 0.4 * Math.sin(state.tick * 0.15);
       const sp = 12 + pz * 6;
       ctx.strokeStyle = '#22e6ff';
@@ -2112,8 +2118,8 @@
       ctx.globalAlpha = 1;
     }
 
-    // 반사 모드 — 강화된 이중 오라 링 (경고) — 보호막 중엔 숨김
-    if (boss.reflect && !shielded) {
+    // 반사 모드 — 강화된 이중 오라 링 (경고) — 실드 여부와 무관하게 표시
+    if (boss.reflect) {
       const pulse = 0.6 + 0.4 * Math.sin(state.tick * 0.2);
       ctx.strokeStyle = boss.tierColor;
       ctx.shadowColor = boss.tierColor;
@@ -2233,10 +2239,10 @@
     ctx.shadowBlur = 8;
     ctx.fillRect(bx, by, bw * Math.max(0, hpRatio), 10);
     ctx.shadowBlur = 0;
-    ctx.fillStyle = shielded ? '#22e6ff' : (boss.reflect ? boss.tierColor : '#cfe6ff');
+    ctx.fillStyle = boss.reflect ? boss.tierColor : (shielded ? '#22e6ff' : '#cfe6ff');
     ctx.font = 'bold 12px Menlo, Consolas, monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(shielded ? 'BOSS — 보호막 (실드 파괴!)' : (boss.reflect ? 'BOSS — 반사 중!' : 'BOSS #' + (bossKills + 1)), W / 2, by - 6);
+    ctx.fillText(boss.reflect ? 'BOSS — 반사 중!' : (shielded ? 'BOSS — 보호막 (실드 파괴!)' : 'BOSS #' + (bossKills + 1)), W / 2, by - 6);
   }
 
   function draw() {
@@ -3214,10 +3220,10 @@
   }
 
   // 데모 종료 → 진짜 게임 시작
-  function startRealGame() {
+  function startRealGame(resumeLevel) {
     state.attract = false;
     simMenu = false;
-    state.score = 0; state.lives = 5; state.deaths = 0; state.level = 1;
+    state.score = 0; state.lives = 5; state.deaths = 0; state.level = resumeLevel || 1;
     state.energy = state.energyMax;
     state.ammo = { rapid: 0, bomb: 0 };
     state.fireworks = [];
