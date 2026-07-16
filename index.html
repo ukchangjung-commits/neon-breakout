@@ -512,7 +512,7 @@
   // ==== 글로벌 랭킹 인터랙티브 (보스 패트롤 + 폭탄 소트 + 방어모드) — 열리면 뒤 게임(데모)은 자동 포즈 ====
   let selRecordName = null;
   const rankViz = { order: [], bossCol: 2, bossX: 0, dir: 1, timer: 600, mode: 'patrol', defendT: 0, shields: 0, parts: 0, bombs: [], brokenT: [0, 0, 0, 0, 0, 0], flash: 0, t: 0, hurt: 0 };
-  const RANK_COL_LABELS = ['등수', '이니셜', '최고', '누적', '레벨', '날짜'];
+  const RANK_COL_LABELS = ['RANK', 'INITIAL', 'BEST', 'TOTAL', 'LEVEL', 'DATE'];
   function rankLayout() {
     const tableW = Math.min(600, W - 36);
     const x0 = W / 2 - tableW / 2;
@@ -850,7 +850,7 @@
     ctx.restore();
     if (!recordsList.length) {
       ctx.fillStyle = '#5f7396'; ctx.font = '15px Menlo, Consolas, monospace'; ctx.textAlign = 'center';
-      ctx.fillText('아직 기록이 없습니다 — 첫 도전자가 되어보세요!', W / 2, L.rowTop + 40);
+      ctx.fillText('No records yet — be the first challenger!', W / 2, L.rowTop + 40);
     }
     for (let i = 0; i < rankViz.bombs.length; i++) { // 폭탄 — 게임과 동일한 모양
       const b = rankViz.bombs[i];
@@ -865,7 +865,7 @@
     }
     ctx.globalAlpha = 1;
     drawRankBoss(rankViz.bossX, L.laneY);
-    drawUiButton(recordsCloseRect(), selRecordName ? '▶ ' + selRecordName + ' 로 시작' : '이니셜 선택 후 시작', selRecordName ? '#2effc8' : '#5f7396');
+    drawUiButton(recordsCloseRect(), selRecordName ? '▶ START AS ' + selRecordName : 'SELECT INITIAL TO START', selRecordName ? '#2effc8' : '#5f7396');
   }
   function openRecords() {
     selRecordName = null;
