@@ -649,7 +649,7 @@
         superLimiter.attack.setValueAtTime(0.003, _lt);
         superLimiter.release.setValueAtTime(0.15, _lt);
         const _lmk = audio.createGain();
-        _lmk.gain.value = 1.05;
+        _lmk.gain.value = 0.945;
         superLimiter.connect(_lmk).connect(masterGain);
         // iOS: 전화·앱전환·잠금으로 'interrupted' 되면 자동 복구 (WebKit 고유 상태)
         if (audio.addEventListener) audio.addEventListener('statechange', () => {
@@ -776,12 +776,18 @@
     bombShot: () => {
       if (!audio) return;
       const t = audio.currentTime;
-      // 최대출력: 폭탄레이저(발사중) + 고속연사 + 에너지충전(30%+) 겹칠 때만 '두두두' ×6(리미터 뒤 −30%) → 왜곡 없이, 그 외엔 원래 소리
+      // 최대출력: 폭탄레이저(발사중) + 고속연사 + 에너지충전(30%+) 겹칠 때만 'M60식 두두두' ×6(리미터 뒤) → 왜곡 없이, 그 외엔 원래 '퉁'
       const boost = SUPER_SFX && state.buffs.rapid > 0 && state.energy > state.energyMax * 0.3;
-      const g = boost ? 6 : 1;
-      const out = (boost && superLimiter) ? superLimiter : masterGain;
-      tone(190, t, 0.18, 'sine', 0.09 * g, -110, out);
-      noise(t, 0.08, 0.05 * g, 700, out);
+      if (boost) {
+        const g = 6, out = superLimiter || masterGain;
+        noise(t, 0.015, 0.05 * g, 4200, out);           // 초반 '착!' 크랙 (노리쇠/총구 스냅)
+        tone(140, t, 0.15, 'sine', 0.09 * g, -70, out); // 저역 바디 '텅' (머즐 블라스트)
+        tone(68,  t, 0.13, 'sine', 0.07 * g, -18, out); // 초저역 펀치 (붐)
+        noise(t, 0.07, 0.045 * g, 520, out);            // 가스/공기 바디
+      } else {
+        tone(190, t, 0.18, 'sine', 0.09, -110);         // 원래 폭탄레이저 '퉁'
+        noise(t, 0.08, 0.05, 700);
+      }
     },
     brick:  (combo = 0) => beep(520 + Math.min(combo, 20) * 45 + Math.random() * 220, 0.12, 'triangle', 0.07, 300),
     bounce: () => beep(220, 0.06, 'sine', 0.05, 80),
