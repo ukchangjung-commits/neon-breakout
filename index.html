@@ -511,17 +511,25 @@
   function recordsCloseRect() { const w = Math.min(320, W - 40); return { x: W / 2 - w / 2, y: H - 58, w: w, h: 44 }; }
   // ==== 글로벌 랭킹 인터랙티브 (보스 패트롤 + 폭탄 소트 + 방어모드) — 열리면 뒤 게임(데모)은 자동 포즈 ====
   let selRecordName = null;
-  const rankViz = { order: [], bossCol: 2, bossX: 0, dir: 1, timer: 600, mode: 'patrol', defendT: 0, horns: 5, hornMax: 5, bombs: [], brokenT: [0, 0, 0, 0, 0, 0], flash: 0, t: 0, hurt: 0 };
+  const rankViz = { order: [], bossCol: 2, bossX: 0, dir: 1, timer: 600, mode: 'patrol', defendT: 0, shields: 0, parts: 0, bombs: [], brokenT: [0, 0, 0, 0, 0, 0], flash: 0, t: 0, hurt: 0 };
   const RANK_COL_LABELS = ['등수', '이니셜', '최고', '누적', '레벨', '날짜'];
   function rankLayout() {
     const tableW = Math.min(600, W - 36);
     const x0 = W / 2 - tableW / 2;
-    const fr = [0.10, 0.15, 0.20, 0.20, 0.13, 0.22]; // 등수,이니셜,최고,누적,레벨,날짜
-    const cols = []; let acc = x0;
-    for (let i = 0; i < fr.length; i++) { const w = tableW * fr[i]; cols.push({ x: acc, w: w, cx: acc + w / 2 }); acc += w; }
+    // 벽돌 그리드 — 컬럼 폭 = 벽돌 개수(등수2·이니셜2·최고3·누적4·레벨2·날짜4 = 17벽돌), 게임처럼 등간격
+    const BRICK_COLS = [2, 2, 3, 4, 2, 4];
+    const nB = 17, bp = 4;
+    const bw2 = (tableW - (nB - 1) * bp) / nB;
+    const cols = []; let bi = 0;
+    for (let i = 0; i < BRICK_COLS.length; i++) {
+      const x = x0 + bi * (bw2 + bp);
+      const w = BRICK_COLS[i] * bw2 + (BRICK_COLS[i] - 1) * bp;
+      cols.push({ x: x, w: w, cx: x + w / 2, bricks: BRICK_COLS[i], b0: bi });
+      bi += BRICK_COLS[i];
+    }
     const listTop = 190, rowH = 30;
     const listH = Math.max(rowH, (H - 58) - 14 - listTop); // '행 선택 후 시작' 버튼 위까지 데이터 영역
-    return { tableW: tableW, x0: x0, cols: cols, titleY: 64, laneY: 106, brickY: 128, headY: 170, listTop: listTop, rowTop: listTop + 22, rowH: rowH, listH: listH };
+    return { tableW: tableW, x0: x0, cols: cols, bw2: bw2, bp: bp, brickH: Math.round(bw2 / 1.9), titleY: 64, laneY: 106, brickY: 128, headY: 170, listTop: listTop, rowTop: listTop + 22, rowH: rowH, listH: listH };
   }
   function rankCum(r) { return r.cum != null ? r.cum : (r.score || 0); }
   function rankTs(r) { return r.ts || 0; }
@@ -532,14 +540,28 @@
     4: function (a, b) { return (b.level || 1) - (a.level || 1); },              // 레벨 내림
     5: function (a, b) { return rankTs(b) - rankTs(a); },                        // 날짜 최근
   };
+  function fmtWhen(ts) { // 날짜 표기 — 260718.23:15 (YYMMDD.HH:MM)
+    const d = new Date(ts);
+    const p = function (n) { return (n < 10 ? '0' : '') + n; };
+    return p(d.getFullYear() % 100) + p(d.getMonth() + 1) + p(d.getDate()) + '.' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+  function fmtNum(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); } // 3자리 콤마
+  // 이모지 이니셜 테스트 — 표시 전용(저장·클라우드 미반영). 제거하려면 빈 배열([]) 반환으로.
+  function rankTestSet() {
+    const names = ['💖💙🏆', '💣🐭🐮', '🐯🐰🐲', '🐍🐴🐑', '🐵🐔🐶', '🐷ⓆⓇ', 'ⒷⓌⒺ', 'ⓂⓈ0'];
+    const ts = Date.now() - 3 * 86400000; // 3일 전 — 날짜 정렬 시 맨 아래
+    return names.map(function (n, i) {
+      return { name: n, score: 800 + i * 120, cum: 2000 + i * 900, level: 1 + (i % 2), ts: ts, when: fmtWhen(ts) };
+    });
+  }
   function rankInit() {
-    recordsList = (cloudAll && cloudAll.length) ? cloudAll : loadRecords();
+    recordsList = ((cloudAll && cloudAll.length) ? cloudAll : loadRecords()).concat(rankTestSet());
     const L = rankLayout();
     rankViz.order = recordsList.slice();
     rankViz.order.sort(RANK_SORTS[2]);
     rankViz.order.forEach(function (r, i) { r._slot = i; r._ry = L.rowTop + i * L.rowH; });
     rankViz.bossCol = 2; rankViz.dir = 1; rankViz.timer = 600; rankViz.mode = 'patrol';
-    rankViz.horns = rankViz.hornMax; rankViz.bombs = []; rankViz.flash = 0; rankViz.defendT = 0;
+    rankViz.shields = 0; rankViz.parts = 0; rankViz.bombs = []; rankViz.flash = 0; rankViz.defendT = 0;
     rankViz.brokenT = [0, 0, 0, 0, 0, 0]; rankViz.t = 0; rankViz.hurt = 0;
     rankViz.bossX = L.cols[2].cx;
   }
@@ -555,14 +577,14 @@
   }
   function rankEnterDefense(col) {
     const L = rankLayout();
-    rankViz.mode = 'defend'; rankViz.bossCol = col; rankViz.defendT = 1200; rankViz.horns = rankViz.hornMax; rankViz.flash = 14; rankViz.hurt = 8;
+    rankViz.mode = 'defend'; rankViz.bossCol = col; rankViz.defendT = 1200; rankViz.shields = 2; rankViz.parts = 9; rankViz.flash = 14; rankViz.hurt = 8;
     spawnParticles(L.cols[col].cx, L.laneY, '#ff3df0', 22, 2);
     if (sfx.boom) sfx.boom();
     rankDropBomb(col);
   }
   function rankCellAt(x, y) {
     const L = rankLayout();
-    if (y < L.laneY - 22 || y > L.laneY + 22) return -1;
+    if (y < L.laneY - 22 || y > L.listTop - 4) return -1; // 몹 레인~벽돌~헤더 텍스트(등수~날짜)까지 선택 가능
     for (let c = 1; c <= 5; c++) if (x >= L.cols[c].x && x <= L.cols[c].x + L.cols[c].w) return c;
     return -1;
   }
@@ -589,9 +611,18 @@
         rankDropBomb(rankViz.bossCol);
         rankViz.timer = 600; // 10초 (60Hz)
       }
-    } else { // defend — 20초, 뿔이 하나씩 소멸 (시계 표시 없음)
-      if (--rankViz.defendT <= 0) { rankViz.mode = 'patrol'; rankViz.timer = 600; rankViz.horns = rankViz.hornMax; rankViz.dir = 1; }
-      else rankViz.horns = Math.max(0, Math.ceil(rankViz.defendT / (1200 / rankViz.hornMax)));
+    } else { // defend — 실드 2겹(바깥 5초·안쪽 10초 제거) → 부속 9개(뿔5+이빨4) 1초당 1개 → 1초 후 즉시 이동 (총 20초, 시계 없음)
+      const elapsed = 1200 - rankViz.defendT;
+      rankViz.shields = elapsed < 300 ? 2 : (elapsed < 600 ? 1 : 0);
+      rankViz.parts = elapsed < 600 ? 9 : Math.max(0, 9 - Math.floor((elapsed - 600) / 60));
+      if (--rankViz.defendT <= 0) { // 20초 종료 — 기다림 없이 바로 옆 칸으로 이동
+        rankViz.mode = 'patrol';
+        rankViz.bossCol += rankViz.dir;
+        if (rankViz.bossCol >= 5) { rankViz.bossCol = 5; rankViz.dir = -1; }
+        else if (rankViz.bossCol <= 1) { rankViz.bossCol = 1; rankViz.dir = 1; }
+        rankDropBomb(rankViz.bossCol);
+        rankViz.timer = 600;
+      }
     }
     for (let i = rankViz.bombs.length - 1; i >= 0; i--) {
       const b = rankViz.bombs[i];
@@ -676,18 +707,22 @@
     ctx.globalAlpha = 1;
     ctx.restore();
   }
-  // 랭킹 미니 보스 — 게임 보스(drawBoss)와 같은 문법: 어두운 몸통+색 테두리+뿔+쫓는 눈동자+이빨, 방어 중엔 반사풍 오라
+  // 랭킹 미니 보스 — 게임 아이덴티티: 눈 1개. 자동(패트롤)=민몸, 방어=실드 2겹 + 부속 9개(뿔5+이빨4) 카운트다운
   function drawRankBoss(bx, by) {
-    const w = 42, h = 26;
+    const w = 42, h = 18; // 세로 26→18 (−30%)
     const defend = rankViz.mode === 'defend';
     const pulse = 0.6 + 0.4 * Math.sin(rankViz.t * 0.15);
     const L = rankLayout();
-    if (defend) { // 이중 오라 링 — 게임 반사 모드와 동일한 연출
+    if (defend && rankViz.shields >= 1) { // 안쪽 실드 (10초에 제거)
       ctx.strokeStyle = '#ff3df0'; ctx.shadowColor = '#ff3df0';
       ctx.globalAlpha = 0.5 + pulse * 0.5; ctx.lineWidth = 3; ctx.shadowBlur = 24;
       ctx.beginPath(); ctx.roundRect(bx - w / 2 - 6, by - h / 2 - 6, w + 12, h + 12, 12); ctx.stroke();
+      ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+    }
+    if (defend && rankViz.shields >= 2) { // 바깥 실드 (5초에 제거) — 숨쉬듯
       const sp = 10 + pulse * 6;
-      ctx.globalAlpha = 0.25 + pulse * 0.3; ctx.lineWidth = 2;
+      ctx.strokeStyle = '#ff3df0'; ctx.shadowColor = '#ff3df0';
+      ctx.globalAlpha = 0.25 + pulse * 0.3; ctx.lineWidth = 2; ctx.shadowBlur = 24;
       ctx.beginPath(); ctx.roundRect(bx - w / 2 - sp, by - h / 2 - sp, w + sp * 2, h + sp * 2, 16); ctx.stroke();
       ctx.shadowBlur = 0; ctx.globalAlpha = 1;
     }
@@ -695,51 +730,53 @@
     ctx.fillStyle = '#12081a';
     ctx.strokeStyle = bodyColor; ctx.lineWidth = 2.5;
     ctx.shadowColor = bodyColor; ctx.shadowBlur = defend ? 26 : 14;
-    ctx.beginPath(); ctx.roundRect(bx - w / 2, by - h / 2, w, h, 8); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.roundRect(bx - w / 2, by - h / 2, w, h, 7); ctx.fill(); ctx.stroke();
     ctx.shadowBlur = 0;
     if (defend) { // 몸통 펄스 채움
       ctx.fillStyle = '#ff3df0'; ctx.globalAlpha = 0.35 + 0.25 * Math.sin(rankViz.t * 0.2);
-      ctx.beginPath(); ctx.roundRect(bx - w / 2, by - h / 2, w, h, 8); ctx.fill(); ctx.globalAlpha = 1;
+      ctx.beginPath(); ctx.roundRect(bx - w / 2, by - h / 2, w, h, 7); ctx.fill(); ctx.globalAlpha = 1;
     }
-    ctx.fillStyle = bodyColor; // 뿔 — 남은 개수만 (방어 중 하나씩 소멸, 시계 없음)
-    for (let i = 0; i < rankViz.horns; i++) {
-      const hx = bx - w / 2 + w * (i + 1) / (rankViz.hornMax + 1);
-      const hh = 7 + (i % 3) * 2;
-      ctx.beginPath(); ctx.moveTo(hx - 3, by - h / 2 + 1); ctx.lineTo(hx, by - h / 2 - hh); ctx.lineTo(hx + 3, by - h / 2 + 1); ctx.fill();
+    if (defend) { // 부속 9개 — 뿔 5(위)부터 1초에 1개씩, 이어서 이빨 4(아래)
+      const horns = Math.max(0, rankViz.parts - 4);
+      const teeth = Math.min(4, rankViz.parts);
+      ctx.fillStyle = bodyColor;
+      for (let i = 0; i < horns; i++) {
+        const hx = bx - w / 2 + w * (i + 1) / 6;
+        const hh = 6 + (i % 3) * 2;
+        ctx.beginPath(); ctx.moveTo(hx - 3, by - h / 2 + 1); ctx.lineTo(hx, by - h / 2 - hh); ctx.lineTo(hx + 3, by - h / 2 + 1); ctx.fill();
+      }
+      ctx.globalAlpha = 0.85;
+      for (let t = 0; t < teeth; t++) {
+        const tx = bx - w / 2 + w * (t + 1) / 5;
+        ctx.beginPath(); ctx.moveTo(tx - 2.5, by + h / 2 - 1); ctx.lineTo(tx, by + h / 2 + 4); ctx.lineTo(tx + 2.5, by + h / 2 - 1); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
     }
-    // 눈 — 이동 방향을 쫓는 눈동자 (게임 보스와 동일한 방식)
+    // 눈 1개 — 이동 방향을 쫓는 눈동자 (게임 보스 아이덴티티)
     const look = Math.max(-3, Math.min(3, (L.cols[rankViz.bossCol].cx - bx) * 0.08));
-    for (const ex of [bx - 8, bx + 8]) {
-      ctx.fillStyle = '#0a0510';
-      ctx.beginPath(); ctx.ellipse(ex, by - 2, 6, 4.2, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#ff2020'; ctx.shadowColor = '#ff2020'; ctx.shadowBlur = defend ? 12 : 7;
-      ctx.beginPath(); ctx.arc(ex + look, by - 2, 2.4, 0, Math.PI * 2); ctx.fill();
-      ctx.shadowBlur = 0;
-    }
-    ctx.fillStyle = bodyColor; // 이빨
-    ctx.globalAlpha = 0.85;
-    for (let t = 0; t < 4; t++) {
-      const tx = bx - w / 2 + w * (t + 1) / 5;
-      ctx.beginPath(); ctx.moveTo(tx - 2.5, by + h / 2 - 1); ctx.lineTo(tx, by + h / 2 + 5); ctx.lineTo(tx + 2.5, by + h / 2 - 1); ctx.fill();
-    }
-    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#0a0510';
+    ctx.beginPath(); ctx.ellipse(bx, by, 7.5, 5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#ff2020'; ctx.shadowColor = '#ff2020'; ctx.shadowBlur = defend ? 12 : 7;
+    ctx.beginPath(); ctx.arc(bx + look, by, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
   }
   function drawRankViz() {
     const L = rankLayout();
     ctx.fillStyle = 'rgba(5, 8, 16, 0.94)';
     ctx.fillRect(-10, -10, W + 20, H + 20);
-    // 제목 — 좌우 트로피로 표 폭까지 채움 (설명 문구 없음)
+    // 제목(30px = 큰 트로피와 동일 크기) — 좌우 트로피 5개씩, 각 줄 가운데(3번째)는 1.5배 크게·위로
     ctx.textAlign = 'center';
     const title = fdb ? '글로벌 랭킹' : '랭킹 기록';
-    ctx.font = 'bold 28px Menlo, Consolas, monospace';
-    const tw = ctx.measureText(title).width;
+    ctx.font = 'bold 30px Menlo, Consolas, monospace';
     ctx.fillStyle = '#22e6ff'; ctx.shadowColor = '#22e6ff'; ctx.shadowBlur = 16;
     ctx.fillText(title, W / 2, L.titleY);
     ctx.shadowBlur = 0;
-    ctx.font = '20px Menlo, Consolas, monospace';
-    for (let off = 14; off < L.tableW / 2 - tw / 2 - 24; off += 30) {
-      ctx.fillText('🏆', L.x0 + off, L.titleY);
-      ctx.fillText('🏆', L.x0 + L.tableW - off, L.titleY);
+    for (let s = 0; s < 5; s++) {
+      const big = s === 2;
+      ctx.font = (big ? '30px' : '20px') + ' Menlo, Consolas, monospace';
+      const ty = big ? L.titleY - 6 : L.titleY;
+      ctx.fillText('🏆', L.x0 + 14 + s * 30, ty);
+      ctx.fillText('🏆', L.x0 + L.tableW - 14 - s * 30, ty);
     }
     // 컬럼 헤더
     ctx.font = 'bold 13px Menlo, Consolas, monospace';
@@ -747,16 +784,14 @@
       ctx.fillStyle = (c === rankViz.bossCol) ? '#ffc233' : '#8fa8cf';
       ctx.fillText(RANK_COL_LABELS[c], L.cols[c].cx, L.headY);
     }
-    // 벽돌 줄 — 게임 벽돌 비율(≈1.9:1) 미니(25×13), 필드마다 색상, 게임과 동일한 네온 글로우
-    const bw2 = 25, bh2 = 13, bp = 4;
+    // 벽돌 줄 — 등간격 그리드(컬럼 폭=벽돌 개수, 게임 비율 ≈1.9:1), 필드마다 색상, 게임과 동일한 네온 글로우
     for (let c = 0; c < 6; c++) {
       if (rankViz.brokenT[c] > 0) continue; // 폭탄에 부서짐 — 잠시 후 재생
       const color = ROW_COLORS[c % ROW_COLORS.length];
-      const n = Math.max(1, Math.floor((L.cols[c].w - 8 + bp) / (bw2 + bp)));
-      const total = n * bw2 + (n - 1) * bp;
-      let bx = L.cols[c].cx - total / 2;
       ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 8;
-      for (let k = 0; k < n; k++) { ctx.fillRect(bx, L.brickY, bw2, bh2); bx += bw2 + bp; }
+      for (let k = 0; k < L.cols[c].bricks; k++) {
+        ctx.fillRect(L.x0 + (L.cols[c].b0 + k) * (L.bw2 + L.bp), L.brickY, L.bw2, L.brickH);
+      }
       ctx.shadowBlur = 0;
     }
     // 데이터 표 — 버튼 위까지, 드래그/휠 스크롤 (스크롤바 없음)
@@ -773,11 +808,11 @@
       ctx.font = (rank <= 3 ? 'bold ' : '') + '14px Menlo, Consolas, monospace';
       ctx.fillStyle = medal; ctx.fillText(String(rank), L.cols[0].cx, y);
       ctx.fillStyle = rank <= 3 ? medal : '#22e6ff'; ctx.fillText(r.name || '---', L.cols[1].cx, y);
-      ctx.fillStyle = '#cfe6ff'; ctx.fillText(String(r.score || 0), L.cols[2].cx, y);
-      ctx.fillStyle = '#ffd0f5'; ctx.fillText(String(rankCum(r)), L.cols[3].cx, y);
+      ctx.fillStyle = '#cfe6ff'; ctx.fillText(fmtNum(r.score || 0), L.cols[2].cx, y);
+      ctx.fillStyle = '#ffd0f5'; ctx.fillText(fmtNum(rankCum(r)), L.cols[3].cx, y);
       ctx.fillStyle = '#8fe0ff'; ctx.fillText('LV' + (r.level || 1), L.cols[4].cx, y);
       ctx.fillStyle = '#5f7396'; ctx.font = '12px Menlo, Consolas, monospace';
-      ctx.fillText((r.when || '').replace('오전 ', '').replace('오후 ', ''), L.cols[5].cx, y);
+      ctx.fillText(r.ts ? fmtWhen(r.ts) : (r.when || '').replace('오전 ', '').replace('오후 ', ''), L.cols[5].cx, y);
     }
     ctx.restore();
     if (!recordsList.length) {
@@ -1568,8 +1603,7 @@
       cum: state.score,         // 누적점수 (같은 이니셜 게임 합)
       level: state.level,       // 도달 최고(누적) 레벨
       ts: now,                  // 최근 플레이 타임스탬프(정렬용)
-      when: new Date().toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' }) +
-            ' ' + new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }),
+      when: fmtWhen(now), // 260718.23:15 형식
     };
     const recs = loadRecords();
     const ex = recs.find(r => (r.name || '???') === name); // 이니셜별 1행
@@ -3661,7 +3695,7 @@
         if (inBtn(recordsCloseRect(), apt.x, apt.y)) { if (selRecordName) startAsInitial(selRecordName); return; }
         const _L = rankLayout();
         if (Math.abs(apt.x - rankViz.bossX) < 24 && Math.abs(apt.y - _L.laneY) < 22) { // 몹 클릭 = 방어 20초 리셋 (피격 플래시)
-          rankViz.mode = 'defend'; rankViz.defendT = 1200; rankViz.horns = rankViz.hornMax; rankViz.flash = 14; rankViz.hurt = 8;
+          rankViz.mode = 'defend'; rankViz.defendT = 1200; rankViz.shields = 2; rankViz.parts = 9; rankViz.flash = 14; rankViz.hurt = 8;
           spawnParticles(rankViz.bossX, _L.laneY, '#ff3df0', 20, 2); if (sfx.boom) sfx.boom();
           return;
         }
@@ -3736,7 +3770,7 @@
         if (inBtn(recordsCloseRect(), apt.x, apt.y)) { if (selRecordName) startAsInitial(selRecordName); return; }
         const _L = rankLayout();
         if (Math.abs(apt.x - rankViz.bossX) < 24 && Math.abs(apt.y - _L.laneY) < 22) {
-          rankViz.mode = 'defend'; rankViz.defendT = 1200; rankViz.horns = rankViz.hornMax; rankViz.flash = 14; rankViz.hurt = 8;
+          rankViz.mode = 'defend'; rankViz.defendT = 1200; rankViz.shields = 2; rankViz.parts = 9; rankViz.flash = 14; rankViz.hurt = 8;
           spawnParticles(rankViz.bossX, _L.laneY, '#ff3df0', 20, 2); if (sfx.boom) sfx.boom();
           return;
         }
