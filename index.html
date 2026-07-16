@@ -882,6 +882,29 @@
       ctx.fillText('🏆', L.x0 + t.off, L.titleY);
       ctx.fillText('🏆', L.x0 + L.tableW - t.off, L.titleY);
     }
+    // 타이틀 위 장식 줄 — 'L'(GLOBAL 2번째 글자) 위 ~ 'N'(RANKING 뒤쪽) 위: 💖·아이템4·12지신·아이템3·💣·💙 (22개)
+    const DECO = ['💖', 'Ⓠ', 'Ⓡ', 'Ⓑ', 'Ⓦ', '🐭', '🐮', '🐯', '🐰', '🐲', '🐍', '🐴', '🐑', '🐵', '🐔', '🐶', '🐷', 'Ⓔ', 'Ⓜ', 'Ⓢ', '💣', '💙'];
+    ctx.font = 'italic bold 27px Georgia, "Palatino Linotype", "Times New Roman", serif';
+    try { ctx.letterSpacing = '2.5px'; } catch (e) {}
+    const tw13 = ctx.measureText(title).width * 1.3; // 실제 그린 타이틀 폭(1.3배 스케일 반영)
+    try { ctx.letterSpacing = '0px'; } catch (e) {}
+    const dxs = W / 2 - tw13 / 2 + tw13 * 0.107; // 'L' 위 (14자 중 2번째)
+    const dxe = W / 2 - tw13 / 2 + tw13 * 0.893; // 'N' 위 (14자 중 13번째)
+    const dy = 17;
+    for (let i = 0; i < DECO.length; i++) {
+      const dx = dxs + (dxe - dxs) * (i / (DECO.length - 1));
+      const ditm = ENTRY_ITEM_TOKENS[DECO[i]];
+      if (ditm) { // 아이템 — 게임 드롭과 동일한 색 동그라미+색 글자 (미니)
+        ctx.strokeStyle = ditm.color; ctx.lineWidth = 1.4;
+        ctx.beginPath(); ctx.arc(dx, dy - 4, 5.5, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = ditm.color;
+        ctx.font = 'bold 7px Menlo, Consolas, monospace';
+        ctx.fillText(ditm.letter, dx, dy - 1.5);
+      } else {
+        ctx.font = '12px Menlo, Consolas, monospace';
+        ctx.fillText(DECO[i], dx, dy);
+      }
+    }
     // 컬럼 헤더
     ctx.font = 'bold 13px Menlo, Consolas, monospace';
     for (let c = 0; c < 6; c++) {
