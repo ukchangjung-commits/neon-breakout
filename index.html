@@ -511,7 +511,7 @@
   function recordsCloseRect() { const w = Math.min(600, W - 36); return { x: W / 2 - w / 2, y: H - 58, w: w, h: 44 }; } // 표(벽돌 그리드)와 동일 폭
   // ==== 글로벌 랭킹 인터랙티브 (보스 패트롤 + 폭탄 소트 + 방어모드) — 열리면 뒤 게임(데모)은 자동 포즈 ====
   let selRecordName = null;
-  const rankViz = { order: [], bossCol: 2, bossX: 0, dir: 1, timer: 600, mode: 'patrol', defendT: 0, shields: 0, parts: 0, bombs: [], brickT: [], flash: 0, t: 0, hurt: 0, hitT: 900, pad: { x: 0, vx: 2.2, w: 46, hurt: 0, shootT: 180, muzzle: 0 }, shots: [], leaves: [], coll: [], collDrop: [] };
+  const rankViz = { order: [], bossCol: 2, bossX: 0, dir: 1, timer: 600, mode: 'patrol', defendT: 0, shields: 0, parts: 0, bombs: [], brickT: [], flash: 0, t: 0, hurt: 0, hitT: 900, pad: { x: 0, vx: 2.2, w: 46, hurt: 0, shootT: 180, muzzle: 0 }, shots: [], leaves: [], coll: [], collDrop: [], paused: false };
   const RANK_COL_LABELS = ['RANK', 'INITIAL', 'BEST', 'TOTAL', 'LEVEL', 'DATE'];
   const RANK_ZODIAC = ['🐭', '🐮', '🐯', '🐰', '🐲', '🐍', '🐴', '🐑', '🐵', '🐔', '🐶', '🐷'];
   function rankLayout() {
@@ -1050,12 +1050,20 @@
     }
     ctx.globalAlpha = 1;
     drawRankBoss(rankViz.bossX, L.laneY);
+    if (rankViz.paused) { // ⏸ 일시정지 라벨 — 정지키(우상단)로 토글
+      ctx.fillStyle = '#ffd700'; ctx.shadowColor = '#ffd700'; ctx.shadowBlur = 14;
+      ctx.font = 'bold 22px Menlo, Consolas, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('⏸ PAUSED', W / 2, L.listTop + L.listH / 2);
+      ctx.shadowBlur = 0;
+    }
     drawUiButton(recordsCloseRect(), selRecordName ? '▶ START AS ' + selRecordName : 'SELECT INITIAL TO START', selRecordName ? '#2effc8' : '#5f7396');
   }
   function openRecords() {
     selRecordName = null;
     state.rankScroll = 0;
     recordsOpen = true;
+    rankViz.paused = false; // 열 때마다 정지 해제
     rankInit();
     if (fdb) refreshCloudTop(); // 최신 글로벌 랭킹 갱신 시도
   }
@@ -2230,7 +2238,7 @@
   }
 
   function step() {
-    if (recordsOpen) updateRankViz(); // 글로벌 랭킹 화면 애니메이션(보스 패트롤/폭탄소트/방어모드)
+    if (recordsOpen && !rankViz.paused) updateRankViz(); // 글로벌 랭킹 애니메이션 (⏸ 정지키로 일시정지 가능)
     if (state.freeze > 0) { state.freeze--; return; } // 히트스톱
     if (state.attract && (simMenu || recordsOpen)) return; // 시뮬 메뉴/글로벌 랭킹 열림 → 데모 자동 포즈
     // 게임 종료 연출 (3초) — 산발 폭발 후 이니셜 입력으로
@@ -4055,7 +4063,10 @@
   function pressSpace() {
     ensureAudio();
     if (state.mode === 'entry') return; // 이니셜 입력 중엔 무시
-    if (state.attract) { simMenu = !simMenu; return; } // 데모: 메뉴 열기/닫기 (시작은 START 클릭)
+    if (state.attract) {
+      if (recordsOpen) { rankViz.paused = !rankViz.paused; return; } // 글로벌 랭킹 — 애니 일시정지/재개
+      simMenu = !simMenu; return; // 데모: 메뉴 열기/닫기 (시작은 START 클릭)
+    }
     onAction(); // play↔pause 토글 등
   }
   pauseBtn.addEventListener('click', (e) => { e.stopPropagation(); pressSpace(); pauseBtn.blur(); });
@@ -4063,7 +4074,7 @@
   let lastChromeKey = '';
   function updateChrome() {
     // clean = HUD에 SPACE 버튼만(4버튼 숨김): 실플레이 진행 중 또는 데모(메뉴 안 열림)
-    const clean = state.attract ? !simMenu : (state.mode === 'play');
+    const clean = state.attract ? (!simMenu && !(recordsOpen && rankViz.paused)) : (state.mode === 'play'); // 랭킹 정지 중엔 ▶ 아이콘
     const cursorHide = (state.mode === 'play' && !state.attract); // 커서 숨김은 실플레이만 (시뮬레이션은 클릭 위해 유지)
     const key = clean + '|' + cursorHide;
     if (key === lastChromeKey) return;
