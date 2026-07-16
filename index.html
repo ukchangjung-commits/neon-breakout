@@ -618,7 +618,7 @@
   }
   function rankCellAt(x, y) {
     const L = rankLayout();
-    if (y < L.laneY - 22 || y > L.listTop - 4) return -1; // 몹 레인~벽돌~헤더 텍스트까지 선택 가능
+    if (y < L.titleY - 40 || y > L.listTop - 4) return -1; // GLOBAL RANKING 글자 최상단~벽돌~헤더까지 선택 가능
     for (let c = 0; c <= 5; c++) if (x >= L.cols[c].x && x <= L.cols[c].x + L.cols[c].w) return c === 0 ? 1 : c; // RANK+INITIAL 통합 — 등수 클릭도 이니셜 선택
     return -1;
   }
