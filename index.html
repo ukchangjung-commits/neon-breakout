@@ -1499,6 +1499,14 @@
   function damageBoss(dmg, x, y) {
     const boss = state.boss;
     if (!boss) return;
+    // 보호막: 벽돌(체커 실드)이 남아 있는 동안 보스 무적. 다 깨지면 이전 설정 그대로.
+    if (state.bricks.length > 0) {
+      boss.hurt = 4;
+      spawnParticles(x, y, '#22e6ff', 8, 1.2);   // 실드 산란
+      state.shake = Math.max(state.shake, 2);
+      sfx.shieldHit();                            // '지잉' 실드 피격
+      return;                                     // 데미지·반사 모두 무효
+    }
     // 자기색 눈(반사 모드) — 데미지 무효 + 데미지만큼 폭탄으로 반환 (최대 3개)
     if (boss.reflect) {
       const n = Math.min(3, Math.max(1, dmg));
@@ -2081,9 +2089,31 @@
     const idx = boss.variant % 12;               // 0~11 — 바퀴 내 순번
     const bodyColor = boss.hurt > 0 ? '#ffffff' : boss.tierColor;
     const bx0 = boss.x, by0 = boss.y, bw0 = boss.w, bh0 = boss.h;
+    const shielded = state.bricks.length > 0; // 벽돌(체커 실드) 남아 있으면 보스 무적
 
-    // 반사 모드 — 강화된 이중 오라 링 (경고)
-    if (boss.reflect) {
+    // 보호막 — 실드 벽돌이 남아 있는 동안 청록 돔 (무적 표시)
+    if (shielded) {
+      const pz = 0.6 + 0.4 * Math.sin(state.tick * 0.15);
+      const sp = 12 + pz * 6;
+      ctx.strokeStyle = '#22e6ff';
+      ctx.shadowColor = '#22e6ff';
+      ctx.shadowBlur = 26;
+      ctx.globalAlpha = 0.45 + pz * 0.4;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.roundRect(bx0 - sp, by0 - sp, bw0 + sp * 2, bh0 + sp * 2, 22);
+      ctx.stroke();
+      ctx.globalAlpha = 0.10 + pz * 0.06;
+      ctx.fillStyle = '#22e6ff';
+      ctx.beginPath();
+      ctx.roundRect(bx0 - sp, by0 - sp, bw0 + sp * 2, bh0 + sp * 2, 22);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
+    }
+
+    // 반사 모드 — 강화된 이중 오라 링 (경고) — 보호막 중엔 숨김
+    if (boss.reflect && !shielded) {
       const pulse = 0.6 + 0.4 * Math.sin(state.tick * 0.2);
       ctx.strokeStyle = boss.tierColor;
       ctx.shadowColor = boss.tierColor;
@@ -2203,10 +2233,10 @@
     ctx.shadowBlur = 8;
     ctx.fillRect(bx, by, bw * Math.max(0, hpRatio), 10);
     ctx.shadowBlur = 0;
-    ctx.fillStyle = boss.reflect ? boss.tierColor : '#cfe6ff';
+    ctx.fillStyle = shielded ? '#22e6ff' : (boss.reflect ? boss.tierColor : '#cfe6ff');
     ctx.font = 'bold 12px Menlo, Consolas, monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(boss.reflect ? 'BOSS — 반사 중!' : 'BOSS #' + (bossKills + 1), W / 2, by - 6);
+    ctx.fillText(shielded ? 'BOSS — 보호막 (실드 파괴!)' : (boss.reflect ? 'BOSS — 반사 중!' : 'BOSS #' + (bossKills + 1)), W / 2, by - 6);
   }
 
   function draw() {
