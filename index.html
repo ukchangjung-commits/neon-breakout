@@ -649,7 +649,7 @@
         superLimiter.attack.setValueAtTime(0.003, _lt);
         superLimiter.release.setValueAtTime(0.15, _lt);
         const _lmk = audio.createGain();
-        _lmk.gain.value = 1.5;
+        _lmk.gain.value = 1.05;
         superLimiter.connect(_lmk).connect(masterGain);
         // iOS: 전화·앱전환·잠금으로 'interrupted' 되면 자동 복구 (WebKit 고유 상태)
         if (audio.addEventListener) audio.addEventListener('statechange', () => {
@@ -776,8 +776,8 @@
     bombShot: () => {
       if (!audio) return;
       const t = audio.currentTime;
-      // 최대출력: 폭탄레이저(발사중) + 고속연사 + 에너지충전(20%+) 겹칠 때만 '두두두' ×6 → 전용 리미터로 왜곡 없이 크게, 그 외엔 원래 소리
-      const boost = SUPER_SFX && state.buffs.rapid > 0 && state.energy > state.energyMax * 0.2;
+      // 최대출력: 폭탄레이저(발사중) + 고속연사 + 에너지충전(30%+) 겹칠 때만 '두두두' ×6(리미터 뒤 −30%) → 왜곡 없이, 그 외엔 원래 소리
+      const boost = SUPER_SFX && state.buffs.rapid > 0 && state.energy > state.energyMax * 0.3;
       const g = boost ? 6 : 1;
       const out = (boost && superLimiter) ? superLimiter : masterGain;
       tone(190, t, 0.18, 'sine', 0.09 * g, -110, out);
