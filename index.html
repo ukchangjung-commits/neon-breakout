@@ -1003,7 +1003,16 @@
       if (y - L.rowH + 8 < L.listTop - 2 || y + 6 > L.listTop + L.listH) continue; // 경계에 걸친 행은 통째로 숨김 (잘린 표시 방지)
       const rank = r._slot + 1;
       const medal = rank === 1 ? '#ffd700' : rank === 2 ? '#c0c0c0' : rank === 3 ? '#cd7f32' : '#cfe6ff';
-      if (r.name === selRecordName) { ctx.fillStyle = 'rgba(46,255,200,0.16)'; ctx.fillRect(L.x0, y - L.rowH + 8, L.tableW, L.rowH - 3); }
+      if (r.name === selRecordName) { // 선택 행 — 시작 버튼과 동일한 라운드 아웃라인 글로우 (내부 투명)
+        ctx.strokeStyle = '#2effc8';
+        ctx.lineWidth = 2;
+        ctx.shadowColor = '#2effc8';
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.roundRect(L.x0 + 1, y - L.rowH + 8, L.tableW - 2, L.rowH - 3, 10);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      }
       ctx.textAlign = 'center';
       ctx.font = (rank <= 3 ? 'bold ' : '') + '14px Menlo, Consolas, monospace';
       ctx.fillStyle = medal; ctx.fillText(String(rank), L.cols[0].cx, y);
