@@ -1009,7 +1009,7 @@
         ctx.shadowColor = '#2effc8';
         ctx.shadowBlur = 10;
         ctx.beginPath();
-        ctx.roundRect(L.x0 + 1, y - L.rowH + 8, L.tableW - 2, L.rowH - 3, 10);
+        ctx.roundRect(L.x0 + 1, y - L.rowH + 11.5, L.tableW - 2, L.rowH - 3, 10); // 텍스트가 박스 세로 중앙에 오도록 +3.5px 보정
         ctx.stroke();
         ctx.shadowBlur = 0;
       }
