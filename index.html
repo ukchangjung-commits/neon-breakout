@@ -776,8 +776,9 @@
     bombShot: () => {
       if (!audio) return;
       const t = audio.currentTime;
-      // 최대출력: 폭탄레이저(발사중) + 고속연사 + 에너지충전(30%+) 겹칠 때만 'M60식 두두두' ×6(리미터 뒤) → 왜곡 없이, 그 외엔 원래 '퉁'
-      const boost = SUPER_SFX && state.buffs.rapid > 0 && state.energy > state.energyMax * 0.3;
+      // 최대출력 M60식 두두두 ×6(리미터 뒤·왜곡 없이): (폭탄 발사 + 고속연사 버프 + 에너지 30%↑) 겹치거나, '고속연사 탄창' 발동 중일 때. 그 외엔 원래 '퉁'
+      const magBurst = state.burst && state.burst.kind === 'rapid';
+      const boost = SUPER_SFX && (magBurst || (state.buffs.rapid > 0 && state.energy > state.energyMax * 0.3));
       if (boost) {
         const g = 6, out = superLimiter || masterGain;
         noise(t, 0.015, 0.05 * g, 4200, out);           // 초반 '착!' 크랙 (노리쇠/총구 스냅)
@@ -1618,7 +1619,7 @@
     if (kind === 'rapid' && state.ammo.rapid > 0) {
       state.ammo.rapid--;
       state.burst = { kind: 'rapid', shots: 25, timer: 0 };
-      showToast('🔫 연사 탄창 발동! 25연발', '#22e6ff');
+      showToast('⚡ 고속연사 탄창! 현재 무장 25발', '#22e6ff');
     } else if (kind === 'bomb' && state.ammo.bomb > 0) {
       state.ammo.bomb--;
       state.burst = { kind: 'bomb', shots: 5, timer: 0 };
@@ -1806,13 +1807,14 @@
       const bst = state.burst;
       if (--bst.timer <= 0) {
         if (bst.kind === 'rapid') {
+          const bomb = state.buffs.bomb > 0;   // 현재 무장 그대로 (폭탄이면 폭탄, 아니면 일반) — 속도만↑
           for (const fx of gunPositions()) {
             if (bst.shots <= 0) break;
-            state.bullets.push({ x: fx, y: H - 36, bomb: false });
+            state.bullets.push({ x: fx, y: H - 36, bomb });
             bst.shots--;
           }
           bst.timer = 3;
-          sfx.shoot();
+          if (bomb) sfx.bombShot(); else sfx.shoot();   // 소리도 현재 무장 따라감 (폭탄이면 M60)
         } else {
           state.bullets.push({ x: p.x + p.w / 2, y: H - 36, bomb: true });
           bst.shots--;
