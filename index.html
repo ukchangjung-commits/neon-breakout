@@ -763,7 +763,7 @@
     bombShot: () => {
       if (!audio) return;
       const t = audio.currentTime;
-      const g = state.buffs.rapid > 0 ? 1.5 : 1; // 폭탄레이저 + 고속연사 겹칠 때 '두두두' 1.5배
+      const g = state.buffs.rapid > 0 ? 3 : 1; // 폭탄레이저 + 고속연사 겹칠 때 '두두두' 3배
       tone(190, t, 0.18, 'sine', 0.09 * g, -110);
       noise(t, 0.08, 0.05 * g, 700);
     },
