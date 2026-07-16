@@ -511,8 +511,9 @@
   function recordsCloseRect() { const w = Math.min(600, W - 36); return { x: W / 2 - w / 2, y: H - 58, w: w, h: 44 }; } // 표(벽돌 그리드)와 동일 폭
   // ==== 글로벌 랭킹 인터랙티브 (보스 패트롤 + 폭탄 소트 + 방어모드) — 열리면 뒤 게임(데모)은 자동 포즈 ====
   let selRecordName = null;
-  const rankViz = { order: [], bossCol: 2, bossX: 0, dir: 1, timer: 600, mode: 'patrol', defendT: 0, shields: 0, parts: 0, bombs: [], brickT: [], flash: 0, t: 0, hurt: 0, hitT: 900, pad: { x: 0, vx: 2.2, w: 46, hurt: 0, shootT: 180, muzzle: 0 }, shots: [] };
+  const rankViz = { order: [], bossCol: 2, bossX: 0, dir: 1, timer: 600, mode: 'patrol', defendT: 0, shields: 0, parts: 0, bombs: [], brickT: [], flash: 0, t: 0, hurt: 0, hitT: 900, pad: { x: 0, vx: 2.2, w: 46, hurt: 0, shootT: 180, muzzle: 0 }, shots: [], leaves: [] };
   const RANK_COL_LABELS = ['RANK', 'INITIAL', 'BEST', 'TOTAL', 'LEVEL', 'DATE'];
+  const RANK_ZODIAC = ['🐭', '🐮', '🐯', '🐰', '🐲', '🐍', '🐴', '🐑', '🐵', '🐔', '🐶', '🐷'];
   function rankLayout() {
     const tableW = Math.min(600, W - 36);
     const x0 = W / 2 - tableW / 2;
@@ -565,7 +566,7 @@
     rankViz.shields = 0; rankViz.parts = 0; rankViz.bombs = []; rankViz.flash = 0; rankViz.defendT = 0;
     rankViz.brickT = new Array(17).fill(0); rankViz.t = 0; rankViz.hurt = 0;
     rankViz.bossX = L.cols[2].cx;
-    rankViz.pad.x = W / 2; rankViz.pad.hurt = 0; rankViz.pad.shootT = 180; rankViz.pad.muzzle = 0; rankViz.shots = [];
+    rankViz.pad.x = W / 2; rankViz.pad.hurt = 0; rankViz.pad.shootT = 180; rankViz.pad.muzzle = 0; rankViz.shots = []; rankViz.leaves = [];
     rankViz.hitT = 600 + Math.floor(Math.random() * 600); // 패들 피격 연출 — 10~20초 간격
   }
   function rankSortBy(col) {
@@ -637,6 +638,7 @@
         for (let k = 0; k < bc.bricks; k++) rankViz.brickT[bc.b0 + k] = 90;
         spawnParticles(b.x, L.brickY + 7, ROW_COLORS[b.col % ROW_COLORS.length], 20, 2);
         if (sfx.brick) sfx.brick();
+        rankViz.leaves.push({ x: b.x, y: L.brickY + 12, ch: RANK_ZODIAC[Math.floor(Math.random() * 12)], t: Math.random() * Math.PI * 2 }); // 12지신 낙엽
       }
       if (!b.sorted && b.y >= L.listTop + 14) { // 표 진입 — 그 컬럼 기준 정렬
         rankSortBy(b.col); b.sorted = true;
@@ -706,10 +708,25 @@
           for (let c2 = 0; c2 < 6; c2++) if (bi >= L.cols[c2].b0 && bi < L.cols[c2].b0 + L.cols[c2].bricks) cc = c2;
           spawnParticles(s.x, L.brickY + 7, ROW_COLORS[cc % ROW_COLORS.length], 12, 1.5);
           if (sfx.brick) sfx.brick();
+          rankViz.leaves.push({ x: s.x, y: L.brickY + 12, ch: RANK_ZODIAC[Math.floor(Math.random() * 12)], t: Math.random() * Math.PI * 2 }); // 12지신 낙엽
           hit = true;
         }
       }
       if (hit || s.y < L.brickY - 10) rankViz.shots.splice(i, 1);
+    }
+    for (let i = rankViz.leaves.length - 1; i >= 0; i--) { // 12지신 낙엽 — 팔랑팔랑 하강
+      const lf = rankViz.leaves[i];
+      lf.t += 0.06;
+      lf.y += 0.8;
+      lf.x += Math.sin(lf.t) * 0.9;
+      if (lf.y >= L.padY - 8 && Math.abs(lf.x - pad.x) <= pad.w / 2 + 10) { // 패들이 받음 — 반짝! (아이템 획득 느낌)
+        spawnParticles(lf.x, L.padY - 8, '#ffd700', 16, 1.6);
+        spawnParticles(lf.x, L.padY - 8, '#ffffff', 8, 1.2);
+        if (sfx.item) sfx.item(); else if (sfx.pop) sfx.pop();
+        rankViz.leaves.splice(i, 1);
+      } else if (lf.y > L.padY + 8) {
+        rankViz.leaves.splice(i, 1); // 놓침 — 바닥에서 조용히 소멸
+      }
     }
     const maxScroll = Math.max(0, rankViz.order.length * L.rowH - L.listH);
     state.rankScroll = Math.max(0, Math.min(state.rankScroll, maxScroll));
@@ -951,6 +968,15 @@
     for (let i = 0; i < rankViz.bombs.length; i++) { // 폭탄 — 게임과 동일한 모양
       const b = rankViz.bombs[i];
       drawBombShape(b.x, b.y, b.y);
+    }
+    ctx.font = '22px Menlo, Consolas, monospace'; // 12지신 낙엽 — 폭탄 크기, 기우뚱 회전
+    for (let i = 0; i < rankViz.leaves.length; i++) {
+      const lf = rankViz.leaves[i];
+      ctx.save();
+      ctx.translate(lf.x, lf.y);
+      ctx.rotate(Math.sin(lf.t) * 0.35);
+      ctx.fillText(lf.ch, 0, 0);
+      ctx.restore();
     }
     // 하단 패들 — 게임 패들과 동일: 각진 몸통(세로 6px) + 앰버 포탑 2개 + 총구 플래시
     const pd = rankViz.pad;
