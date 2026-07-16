@@ -238,6 +238,11 @@
   }
   .hud .score.pop { animation: scorePop 0.3s ease-out; }
   .hud .best  { color: var(--magenta); }
+  /* 이어하기(이니셜 선택 후 시작) — BEST·LV 줄을 살짝 올리고 아래에 이니셜+점수 줄 */
+  .hud .player-row { position: absolute; left: 14px; bottom: 6px; display: none; gap: 6px; align-items: center;
+    color: #2effc8; text-shadow: 0 0 10px rgba(46, 255, 200, 0.5); font-size: 0.9em; font-variant-numeric: tabular-nums; }
+  .hud.with-player .player-row { display: flex; }
+  .hud.with-player .hud-side:first-child { transform: translateY(-8px); }
   .hud .lives {
     color: #ff5577;
     text-shadow: 0 0 10px rgba(255, 85, 119, 0.6), 0 0 22px rgba(255, 85, 119, 0.3);
@@ -331,9 +336,10 @@
   </div>
   <div class="hud">
     <div class="hud-side">
-      <span><span class="label">BEST</span><span class="best" id="best">0</span></span>
+      <span><span class="label" id="bestLabel">BEST</span><span class="best" id="best">0</span></span>
       <span><span class="label">LV</span><span id="level">1</span></span>
     </div>
+    <div class="player-row"><span id="playerName">---</span><span id="playerScore">0</span></div>
     <div class="score-wrap">
       <span class="label">SCORE</span><span class="score" id="score">0</span>
       <span class="lives" id="lives">♥&#xFE0E;♥&#xFE0E;♥&#xFE0E;</span>
@@ -452,6 +458,11 @@
   const BEST_KEY = 'neon-breakout-best';
   let best = Number(safeStore.get(BEST_KEY, 0)) || 0;
   bestEl.textContent = best;
+  // 이어하기(이니셜 선택 후 시작) 시 — BEST·LV 줄을 살짝 올리고 아래에 이니셜+그 이니셜 점수 줄 표시
+  const hudEl = document.querySelector('.hud');
+  const playerNameEl = document.getElementById('playerName');
+  const playerScoreEl = document.getElementById('playerScore');
+  let hudBestName = null, playerBest = 0;
 
   // 보스 격파 트로피 — 12지신 × 4회전(48) × 저항 색띠 10색 = 480마리
   // 이니셜별로 저장 — 같은 이니셜을 입력하면 12지신 진행 상태를 이어서 함
@@ -1116,6 +1127,10 @@
     const list = (cloudAll && cloudAll.length) ? cloudAll : loadRecords();
     const rec = list.find(r => (r.name || '???') === currentPlayer);
     startRealGame(rec && rec.level ? rec.level : 1);
+    hudBestName = currentPlayer; playerBest = rec ? (rec.score || 0) : 0; // HUD — 이니셜+점수 줄 표시
+    playerNameEl.textContent = currentPlayer;
+    playerScoreEl.textContent = playerBest;
+    hudEl.classList.add('with-player');
   }
   function diffStage() {
     if (manualStage !== null) return manualStage;
@@ -1773,6 +1788,7 @@
     // 하트 수에 비례한 패들 두께 (5개=14px … 1개=6px)
     state.paddle.h = Math.min(16, 4 + state.lives * 2);
     bestEl.textContent = best;
+    if (hudBestName) playerScoreEl.textContent = Math.max(playerBest, state.score); // 이니셜 줄 — 이번 판이 넘어서면 실시간 갱신
     levelEl.textContent = isBossLevel(state.level) ? state.level + ' BOSS' : state.level;
     // 빈 하트(죽은 횟수)는 왼쪽부터, 보너스 하트는 오른쪽으로 계속 쌓임
     // 한 줄(8개)이 넘으면 두 줄로 감싸고, 두 줄(16개)도 넘치면 그때만 축소
@@ -3730,6 +3746,7 @@
   function startRealGame(resumeLevel) {
     state.attract = false;
     simMenu = false;
+    hudBestName = null; playerBest = 0; hudEl.classList.remove('with-player'); // 일반 시작 — 이니셜 줄 숨김 (이어하기는 호출 뒤 다시 켬)
     state.score = 0; state.lives = 5; state.deaths = 0; state.level = resumeLevel || 1;
     state.energy = state.energyMax;
     state.ammo = { rapid: 0, bomb: 0 };
@@ -3749,6 +3766,7 @@
     if (state.mode === 'entry') confirmEntry(); // 입력 중이던 기록은 저장하고 전환
     state.attract = true;
     simMenu = false;
+    hudBestName = null; playerBest = 0; hudEl.classList.remove('with-player'); // 데모 복귀 — 이니셜 줄 숨김
     attractPhaseStart = state.tick;
     attractPhase = 'novice';
     demoFade = 0; demoFadeDir = 0; // 레벨 전환 페이드 초기화
