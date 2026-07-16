@@ -1866,11 +1866,23 @@
     return safeStore.getJSON(REC_KEY, []);
   }
   // 이니셜별 최고점만 남기고 점수 내림차순 정렬
+  // 이니셜별 병합 — 문서를 하나 고르는 게 아니라 필드별 취합: BEST=max(score)·TOTAL=max(cum)·LEVEL=max·날짜=최신 ts
   function dedupBest(list) {
     const m = {};
     for (const r of (list || [])) {
+      if (!r) continue;
       const k = r.name || '???';
-      if (!m[k] || (r.score || 0) > (m[k].score || 0)) m[k] = r;
+      if (!m[k]) {
+        m[k] = Object.assign({}, r);
+        if (m[k].cum == null) m[k].cum = m[k].score || 0;
+        continue;
+      }
+      const t = m[k];
+      const rc = r.cum != null ? r.cum : (r.score || 0);
+      if ((r.score || 0) > (t.score || 0)) t.score = r.score;
+      if (rc > (t.cum || 0)) t.cum = rc;
+      if ((r.level || 1) > (t.level || 1)) t.level = r.level;
+      if ((r.ts || 0) > (t.ts || 0)) { t.ts = r.ts; t.when = r.when; }
     }
     return Object.values(m).sort((a, b) => (b.score || 0) - (a.score || 0));
   }
@@ -1896,7 +1908,7 @@
     recs.sort((a, b) => (b.score || 0) - (a.score || 0));
     safeStore.set(REC_KEY, JSON.stringify(recs.slice(0, 100)));
     localTopCache = recs.slice(0, 3); // 데모 화면 TOP 3 갱신
-    cloudSave(rec); // 클라우드 랭킹에도 저장 (미설정 시 무시)
+    cloudSave(Object.assign({ game: state.score }, rec)); // 클라우드 저장 — game=이번판 점수(서버 누적 increment용)
   }
 
   // 데모 화면 하단 TOP 3용 로컬 캐시
@@ -1919,22 +1931,74 @@
       const appMod = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js');
       fsm = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
       fdb = fsm.getFirestore(appMod.initializeApp(FIREBASE_CONFIG));
-      refreshCloudTop();
+      migratePlayers().then(refreshCloudTop); // 1회 구조 이전(멱등) 후 랭킹 로드
     } catch (e) { fdb = null; }
   }
+  // 집계 구조 — 'players' 컬렉션: 이니셜당 문서 1개. cum=서버 원자 누적(increment, 다기기 합산 정확), score/level=max 병합.
   async function cloudSave(rec) {
     if (!fdb) return;
     try {
-      await fsm.addDoc(fsm.collection(fdb, 'scores'), rec);
-      await refreshCloudTop();
+      const nm = rec.name || '???';
+      const ref = fsm.doc(fdb, 'players', nm);
+      const cur = await fsm.getDoc(ref);
+      const d = cur.exists() ? cur.data() : {};
+      await fsm.setDoc(ref, {
+        name: nm,
+        score: Math.max(d.score || 0, rec.score || 0),
+        cum: fsm.increment(rec.game || 0),        // 이번판 점수만 서버에서 누적 (이중 계산 없음)
+        level: Math.max(d.level || 1, rec.level || 1),
+        ts: rec.ts || Date.now(),
+        when: rec.when || '',
+      }, { merge: true });
+    } catch (e) {}
+    try { await fsm.addDoc(fsm.collection(fdb, 'scores'), rec); } catch (e) {} // 구버전 클라이언트 호환 이중 기록
+    try { await refreshCloudTop(); } catch (e) {}
+  }
+  // 1회 마이그레이션 — 구 'scores'(판 단위) → 'players'(집계). _meta 문서로 재실행 방지, max 병합이라 중복 실행에도 안전.
+  async function migratePlayers() {
+    if (!fdb) return;
+    try {
+      const metaRef = fsm.doc(fdb, 'players', '_meta');
+      const meta = await fsm.getDoc(metaRef);
+      if (meta.exists()) return;
+      const s1 = await fsm.getDocs(fsm.query(fsm.collection(fdb, 'scores'), fsm.orderBy('score', 'desc'), fsm.limit(100)));
+      let docs = s1.docs.map(d => d.data());
+      try {
+        const s2 = await fsm.getDocs(fsm.query(fsm.collection(fdb, 'scores'), fsm.orderBy('ts', 'desc'), fsm.limit(100)));
+        docs = docs.concat(s2.docs.map(d => d.data()));
+      } catch (e2) {} // 구 문서엔 ts가 없을 수 있음 — score 쿼리가 커버
+      const merged = dedupBest(docs);
+      for (const r of merged) {
+        const ref = fsm.doc(fdb, 'players', r.name || '???');
+        const cur = await fsm.getDoc(ref);
+        const d = cur.exists() ? cur.data() : {};
+        await fsm.setDoc(ref, {
+          name: r.name || '???',
+          score: Math.max(d.score || 0, r.score || 0),
+          cum: Math.max(d.cum || 0, r.cum != null ? r.cum : (r.score || 0)), // max 병합 = 멱등
+          level: Math.max(d.level || 1, r.level || 1),
+          ts: Math.max(d.ts || 0, r.ts || 0),
+          when: (d.ts || 0) > (r.ts || 0) ? (d.when || '') : (r.when || ''),
+        }, { merge: true });
+      }
+      await fsm.setDoc(metaRef, { migrated: true, at: Date.now() });
     } catch (e) {}
   }
   async function refreshCloudTop() {
     if (!fdb) return;
     try {
-      const snap = await fsm.getDocs(fsm.query(
-        fsm.collection(fdb, 'scores'), fsm.orderBy('score', 'desc'), fsm.limit(100)));
-      cloudAll = dedupBest(snap.docs.map(d => d.data())); // 이니셜별 최고점만
+      const ps = await fsm.getDocs(fsm.query(
+        fsm.collection(fdb, 'players'), fsm.orderBy('score', 'desc'), fsm.limit(100)));
+      let list = ps.docs.map(d => d.data()); // _meta는 score가 없어 쿼리에서 자동 제외
+      if (!list.length) { // 폴백 — 집계 문서가 아직 없으면(이전 전/규칙 차단) 구 컬렉션에서 병합
+        const s1 = await fsm.getDocs(fsm.query(fsm.collection(fdb, 'scores'), fsm.orderBy('score', 'desc'), fsm.limit(100)));
+        list = s1.docs.map(d => d.data());
+        try {
+          const s2 = await fsm.getDocs(fsm.query(fsm.collection(fdb, 'scores'), fsm.orderBy('ts', 'desc'), fsm.limit(100)));
+          list = list.concat(s2.docs.map(d => d.data()));
+        } catch (e2) {}
+      }
+      cloudAll = dedupBest(list); // 이니셜별 필드 병합 (BEST·TOTAL·LEVEL·날짜 각각 최신/최대)
       cloudTop = cloudAll.slice(0, 5);
       if (state.mode === 'over' && cloudAll.length) state.lastRecords = cloudAll;
     } catch (e) {}
