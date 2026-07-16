@@ -511,7 +511,7 @@
   function recordsCloseRect() { const w = Math.min(600, W - 36); return { x: W / 2 - w / 2, y: H - 58, w: w, h: 44 }; } // 표(벽돌 그리드)와 동일 폭
   // ==== 글로벌 랭킹 인터랙티브 (보스 패트롤 + 폭탄 소트 + 방어모드) — 열리면 뒤 게임(데모)은 자동 포즈 ====
   let selRecordName = null;
-  const rankViz = { order: [], bossCol: 2, bossX: 0, dir: 1, timer: 600, mode: 'patrol', defendT: 0, shields: 0, parts: 0, bombs: [], brickT: [], flash: 0, t: 0, hurt: 0, hitT: 900, pad: { x: 0, vx: 2.2, w: 46, hurt: 0, shootT: 180, muzzle: 0 }, shots: [], leaves: [] };
+  const rankViz = { order: [], bossCol: 2, bossX: 0, dir: 1, timer: 600, mode: 'patrol', defendT: 0, shields: 0, parts: 0, bombs: [], brickT: [], flash: 0, t: 0, hurt: 0, hitT: 900, pad: { x: 0, vx: 2.2, w: 46, hurt: 0, shootT: 180, muzzle: 0 }, shots: [], leaves: [], coll: [], collDrop: [] };
   const RANK_COL_LABELS = ['RANK', 'INITIAL', 'BEST', 'TOTAL', 'LEVEL', 'DATE'];
   const RANK_ZODIAC = ['🐭', '🐮', '🐯', '🐰', '🐲', '🐍', '🐴', '🐑', '🐵', '🐔', '🐶', '🐷'];
   function rankLayout() {
@@ -566,7 +566,7 @@
     rankViz.shields = 0; rankViz.parts = 0; rankViz.bombs = []; rankViz.flash = 0; rankViz.defendT = 0;
     rankViz.brickT = new Array(17).fill(0); rankViz.t = 0; rankViz.hurt = 0;
     rankViz.bossX = L.cols[2].cx;
-    rankViz.pad.x = W / 2; rankViz.pad.hurt = 0; rankViz.pad.shootT = 180; rankViz.pad.muzzle = 0; rankViz.shots = []; rankViz.leaves = [];
+    rankViz.pad.x = W / 2; rankViz.pad.hurt = 0; rankViz.pad.shootT = 180; rankViz.pad.muzzle = 0; rankViz.shots = []; rankViz.leaves = []; rankViz.coll = []; rankViz.collDrop = [];
     rankViz.hitT = 600 + Math.floor(Math.random() * 600); // 패들 피격 연출 — 10~20초 간격
   }
   function rankSortBy(col) {
@@ -574,6 +574,29 @@
     rankViz.order.sort(fn);
     rankViz.order.forEach(function (r, i) { r._slot = i; });
     rankViz.flash = 12;
+  }
+  // 12지신 낙엽 스폰 — 속도·흔들림·시작 시점 개별 랜덤 (동시·동속 낙하 방지)
+  function rankSpawnLeaf(x) {
+    const L = rankLayout();
+    rankViz.leaves.push({
+      x: x, y: L.brickY + 12,
+      ch: RANK_ZODIAC[Math.floor(Math.random() * 12)],
+      t: Math.random() * Math.PI * 2,
+      vy: 0.6 + Math.random() * 0.5,          // 낙하 속도
+      sw: 0.04 + Math.random() * 0.05,        // 흔들림 속도
+      amp: 0.6 + Math.random() * 0.7,         // 흔들림 폭
+      delay: Math.floor(Math.random() * 42),  // 스폰 지연 0~0.7초
+    });
+  }
+  // 컬렉션 — 떨어진 순서대로 버튼 위 줄, 가득 차면 왼쪽(오래된 것)부터 좌하단 낙하 소멸
+  function rankCollect(ch, big) {
+    rankViz.coll.push({ ch: ch, big: big });
+    const L = rankLayout();
+    const cap = Math.floor((L.tableW - 20) / 14);
+    while (rankViz.coll.length > cap) {
+      const old = rankViz.coll.shift();
+      rankViz.collDrop.push({ ch: old.ch, big: old.big, x: L.x0 + 10, y: (H - 58) - 8, vx: -1.6, vy: 1.2, a: 1 });
+    }
   }
   function rankDropBomb(col) {
     const L = rankLayout();
@@ -638,7 +661,7 @@
         for (let k = 0; k < bc.bricks; k++) rankViz.brickT[bc.b0 + k] = 90;
         spawnParticles(b.x, L.brickY + 7, ROW_COLORS[b.col % ROW_COLORS.length], 20, 2);
         if (sfx.brick) sfx.brick();
-        rankViz.leaves.push({ x: b.x, y: L.brickY + 12, ch: RANK_ZODIAC[Math.floor(Math.random() * 12)], t: Math.random() * Math.PI * 2 }); // 12지신 낙엽
+        rankSpawnLeaf(b.x); // 12지신 낙엽
       }
       if (!b.sorted && b.y >= L.listTop + 14) { // 표 진입 — 그 컬럼 기준 정렬
         rankSortBy(b.col); b.sorted = true;
@@ -708,25 +731,33 @@
           for (let c2 = 0; c2 < 6; c2++) if (bi >= L.cols[c2].b0 && bi < L.cols[c2].b0 + L.cols[c2].bricks) cc = c2;
           spawnParticles(s.x, L.brickY + 7, ROW_COLORS[cc % ROW_COLORS.length], 12, 1.5);
           if (sfx.brick) sfx.brick();
-          rankViz.leaves.push({ x: s.x, y: L.brickY + 12, ch: RANK_ZODIAC[Math.floor(Math.random() * 12)], t: Math.random() * Math.PI * 2 }); // 12지신 낙엽
+          rankSpawnLeaf(s.x); // 12지신 낙엽
           hit = true;
         }
       }
       if (hit || s.y < L.brickY - 10) rankViz.shots.splice(i, 1);
     }
-    for (let i = rankViz.leaves.length - 1; i >= 0; i--) { // 12지신 낙엽 — 팔랑팔랑 하강
+    for (let i = rankViz.leaves.length - 1; i >= 0; i--) { // 12지신 낙엽 — 개별 속도·흔들림으로 팔랑팔랑 하강
       const lf = rankViz.leaves[i];
-      lf.t += 0.06;
-      lf.y += 0.8;
-      lf.x += Math.sin(lf.t) * 0.9;
+      if (lf.delay > 0) { lf.delay--; continue; } // 스폰 지연 — 동시 낙하 방지
+      lf.t += lf.sw;
+      lf.y += lf.vy;
+      lf.x += Math.sin(lf.t) * lf.amp;
       if (lf.y >= L.padY - 8 && Math.abs(lf.x - pad.x) <= pad.w / 2 + 10) { // 패들이 받음 — 반짝! (아이템 획득 느낌)
         spawnParticles(lf.x, L.padY - 8, '#ffd700', 16, 1.6);
         spawnParticles(lf.x, L.padY - 8, '#ffffff', 8, 1.2);
         if (sfx.item) sfx.item(); else if (sfx.pop) sfx.pop();
+        rankCollect(lf.ch, true);  // 받은 지신 — 축소 없이(12px) 줄에 합류
         rankViz.leaves.splice(i, 1);
       } else if (lf.y > L.padY + 8) {
-        rankViz.leaves.splice(i, 1); // 놓침 — 바닥에서 조용히 소멸
+        rankCollect(lf.ch, false); // 놓친 지신 — 4/5 축소(9.6px)로 줄에 합류
+        rankViz.leaves.splice(i, 1);
       }
+    }
+    for (let i = rankViz.collDrop.length - 1; i >= 0; i--) { // 줄 넘침 — 좌하단으로 낙하하며 페이드
+      const cd = rankViz.collDrop[i];
+      cd.x += cd.vx; cd.y += cd.vy; cd.vy += 0.12; cd.a -= 0.02;
+      if (cd.a <= 0 || cd.y > H + 20) rankViz.collDrop.splice(i, 1);
     }
     const maxScroll = Math.max(0, rankViz.order.length * L.rowH - L.listH);
     state.rankScroll = Math.max(0, Math.min(state.rankScroll, maxScroll));
@@ -972,11 +1003,26 @@
     ctx.font = '22px Menlo, Consolas, monospace'; // 12지신 낙엽 — 폭탄 크기, 기우뚱 회전
     for (let i = 0; i < rankViz.leaves.length; i++) {
       const lf = rankViz.leaves[i];
+      if (lf.delay > 0) continue; // 아직 스폰 전
       ctx.save();
       ctx.translate(lf.x, lf.y);
       ctx.rotate(Math.sin(lf.t) * 0.35);
       ctx.fillText(lf.ch, 0, 0);
       ctx.restore();
+    }
+    // 컬렉션 줄 — 버튼 위, 떨어진 순서대로 (받은 것 12px 축소 없음 / 놓친 것 9.6px)
+    const collY = (H - 58) - 8;
+    for (let i = 0; i < rankViz.coll.length; i++) {
+      const c3 = rankViz.coll[i];
+      ctx.font = (c3.big ? '12px' : '9.6px') + ' Menlo, Consolas, monospace';
+      ctx.fillText(c3.ch, L.x0 + 10 + i * 14, collY);
+    }
+    for (let i = 0; i < rankViz.collDrop.length; i++) { // 넘친 지신 — 좌하단 낙하 소멸
+      const d3 = rankViz.collDrop[i];
+      ctx.globalAlpha = Math.max(0, d3.a);
+      ctx.font = (d3.big ? '12px' : '9.6px') + ' Menlo, Consolas, monospace';
+      ctx.fillText(d3.ch, d3.x, d3.y);
+      ctx.globalAlpha = 1;
     }
     // 하단 패들 — 게임 패들과 동일: 각진 몸통(세로 6px) + 앰버 포탑 2개 + 총구 플래시
     const pd = rankViz.pad;
