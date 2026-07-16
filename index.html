@@ -511,7 +511,7 @@
   function recordsCloseRect() { const w = Math.min(320, W - 40); return { x: W / 2 - w / 2, y: H - 58, w: w, h: 44 }; }
   // ==== 글로벌 랭킹 인터랙티브 (보스 패트롤 + 폭탄 소트 + 방어모드) — 열리면 뒤 게임(데모)은 자동 포즈 ====
   let selRecordName = null;
-  const rankViz = { order: [], bossCol: 2, bossX: 0, dir: 1, timer: 600, mode: 'patrol', defendT: 0, shields: 0, parts: 0, bombs: [], brokenT: [0, 0, 0, 0, 0, 0], flash: 0, t: 0, hurt: 0 };
+  const rankViz = { order: [], bossCol: 2, bossX: 0, dir: 1, timer: 600, mode: 'patrol', defendT: 0, shields: 0, parts: 0, bombs: [], brokenT: [0, 0, 0, 0, 0, 0], flash: 0, t: 0, hurt: 0, pad: { x: 0, vx: 2.2, w: 46, hurt: 0, shootT: 180 }, shots: [] };
   const RANK_COL_LABELS = ['RANK', 'INITIAL', 'BEST', 'TOTAL', 'LEVEL', 'DATE'];
   function rankLayout() {
     const tableW = Math.min(600, W - 36);
@@ -528,8 +528,9 @@
       bi += BRICK_COLS[i];
     }
     const listTop = 190, rowH = 30;
-    const listH = Math.max(rowH, (H - 58) - 14 - listTop); // '행 선택 후 시작' 버튼 위까지 데이터 영역
-    return { tableW: tableW, x0: x0, cols: cols, bw2: bw2, bp: bp, brickH: Math.round(bw2 / 1.9), titleY: 64, laneY: 106, brickY: 128, headY: 170, listTop: listTop, rowTop: listTop + 22, rowH: rowH, listH: listH };
+    const padY = (H - 58) - 22;                            // 하단 패들 레인 (표와 버튼 사이)
+    const listH = Math.max(rowH, padY - 16 - listTop);     // 패들 레인 위까지 데이터 영역
+    return { tableW: tableW, x0: x0, cols: cols, bw2: bw2, bp: bp, brickH: Math.round(bw2 / 1.9), titleY: 64, laneY: 106, brickY: 128, headY: 170, listTop: listTop, rowTop: listTop + 22, rowH: rowH, listH: listH, padY: padY };
   }
   function rankCum(r) { return r.cum != null ? r.cum : (r.score || 0); }
   function rankTs(r) { return r.ts || 0; }
@@ -564,6 +565,7 @@
     rankViz.shields = 0; rankViz.parts = 0; rankViz.bombs = []; rankViz.flash = 0; rankViz.defendT = 0;
     rankViz.brokenT = [0, 0, 0, 0, 0, 0]; rankViz.t = 0; rankViz.hurt = 0;
     rankViz.bossX = L.cols[2].cx;
+    rankViz.pad.x = W / 2; rankViz.pad.hurt = 0; rankViz.pad.shootT = 180; rankViz.shots = [];
   }
   function rankSortBy(col) {
     const fn = RANK_SORTS[col]; if (!fn) return;
@@ -585,7 +587,7 @@
   function rankCellAt(x, y) {
     const L = rankLayout();
     if (y < L.laneY - 22 || y > L.listTop - 4) return -1; // 몹 레인~벽돌~헤더 텍스트까지 선택 가능
-    for (let c = 0; c <= 5; c++) if (x >= L.cols[c].x && x <= L.cols[c].x + L.cols[c].w) return c; // 등수 컬럼(0) 포함
+    for (let c = 0; c <= 5; c++) if (x >= L.cols[c].x && x <= L.cols[c].x + L.cols[c].w) return c === 0 ? 1 : c; // RANK+INITIAL 통합 — 등수 클릭도 이니셜 선택
     return -1;
   }
   function rankRowAt(x, y) {
@@ -638,7 +640,51 @@
         spawnParticles(b.x, b.y, '#ff3df0', 16, 1.8);
         if (sfx.pop) sfx.pop();
       }
-      if (b.y > L.listTop + L.listH) rankViz.bombs.splice(i, 1);
+      if (b.y >= L.padY - 6) { // 바닥 도달 — 패들에 맞으면 펑!
+        if (Math.abs(b.x - rankViz.pad.x) <= rankViz.pad.w / 2 + 8) {
+          spawnParticles(b.x, L.padY - 6, '#ff5555', 26, 2.2);
+          spawnParticles(b.x, L.padY - 6, '#ffc233', 16, 1.8);
+          rankViz.pad.hurt = 20;
+          if (sfx.bombOuch) sfx.bombOuch(); else if (sfx.boom) sfx.boom();
+        } else {
+          spawnParticles(b.x, L.padY - 2, '#ffc233', 8, 1.2); // 빗나감 — 바닥에서 팟
+        }
+        rankViz.bombs.splice(i, 1);
+      }
+    }
+    // 하단 패들 — 게임 데모처럼 떨어지는 폭탄을 쫓고, 없으면 좌우 왕복
+    const pad = rankViz.pad;
+    let tb = null;
+    for (const b of rankViz.bombs) if (!tb || b.y > tb.y) tb = b;
+    if (tb) {
+      pad.x += Math.max(-3.2, Math.min(3.2, (tb.x - pad.x) * 0.08));
+    } else {
+      pad.x += pad.vx;
+      if (pad.x < L.x0 + 30) { pad.x = L.x0 + 30; pad.vx = Math.abs(pad.vx); }
+      if (pad.x > L.x0 + L.tableW - 30) { pad.x = L.x0 + L.tableW - 30; pad.vx = -Math.abs(pad.vx); }
+    }
+    if (pad.hurt > 0) pad.hurt--;
+    if (--pad.shootT <= 0) { // 간혹 총 발사 (2~4.5초 간격)
+      pad.shootT = 120 + Math.floor(Math.random() * 150);
+      const n = 1 + Math.floor(Math.random() * 3);
+      for (let k = 0; k < n; k++) rankViz.shots.push({ x: pad.x - 10 + k * 10, y: L.padY - 10 });
+      if (sfx.shoot) sfx.shoot();
+    }
+    for (let i = rankViz.shots.length - 1; i >= 0; i--) { // 총알 — 폭탄 격추 시 게임처럼 팝
+      const s = rankViz.shots[i];
+      s.y -= 9;
+      let hit = false;
+      for (let j = rankViz.bombs.length - 1; j >= 0; j--) {
+        const b = rankViz.bombs[j];
+        if (Math.abs(b.x - s.x) <= 12 && Math.abs(b.y - s.y) <= 12) {
+          spawnParticles(b.x, b.y, '#ff5555', 14, 1.6);
+          if (sfx.pop) sfx.pop();
+          rankViz.bombs.splice(j, 1);
+          hit = true;
+          break;
+        }
+      }
+      if (hit || s.y < L.listTop - 20) rankViz.shots.splice(i, 1);
     }
     const maxScroll = Math.max(0, rankViz.order.length * L.rowH - L.listH);
     state.rankScroll = Math.max(0, Math.min(state.rankScroll, maxScroll));
@@ -786,29 +832,30 @@
     const L = rankLayout();
     ctx.fillStyle = 'rgba(5, 8, 16, 0.94)';
     ctx.fillRect(-10, -10, W + 20, H + 20);
-    // 제목 — GLOBAL RANKING: 세리프 이탤릭 + 자간 + 골드 그라데이션 + 글로우 (엘레강스 × 네온)
+    // 제목 — GLOBAL RANKING: 세로 2배·가로 1.3배 확대, 자간 2.5px(절반), 골드 그라데이션 + 글로우
     ctx.textAlign = 'center';
     const title = fdb ? 'GLOBAL RANKING' : 'RANKING';
     ctx.save();
+    ctx.translate(W / 2, L.titleY);
+    ctx.scale(1.3, 2);
     ctx.font = 'italic bold 27px Georgia, "Palatino Linotype", "Times New Roman", serif';
-    try { ctx.letterSpacing = '5px'; } catch (e) {} // 미지원 브라우저는 자간 없이 표시
-    const tg = ctx.createLinearGradient(0, L.titleY - 22, 0, L.titleY + 6);
+    try { ctx.letterSpacing = '2.5px'; } catch (e) {} // 미지원 브라우저는 자간 없이 표시
+    const tg = ctx.createLinearGradient(0, -22, 0, 6);
     tg.addColorStop(0, '#fff3c4');
     tg.addColorStop(0.55, '#ffd700');
     tg.addColorStop(1, '#c98f1b');
     ctx.fillStyle = tg;
     ctx.shadowColor = 'rgba(255, 215, 0, 0.75)';
     ctx.shadowBlur = 18;
-    ctx.fillText(title, W / 2, L.titleY);
+    ctx.fillText(title, 0, 0);
     ctx.shadowBlur = 0;
     ctx.restore();
-    // 트로피 — 좌우 5개씩, 가운데(제목)로 갈수록 커지는 계단형 (16→30px)
-    const TSIZE = [16, 19, 22, 26, 30];
-    for (let s = 0; s < 5; s++) {
-      ctx.font = TSIZE[s] + 'px Menlo, Consolas, monospace';
-      const ty = L.titleY - (TSIZE[s] - 16) * 0.35;
-      ctx.fillText('🏆', L.x0 + 14 + s * 30, ty);
-      ctx.fillText('🏆', L.x0 + L.tableW - 14 - s * 30, ty);
+    // 트로피 — 좌우 3개씩 미러 (바깥→안: 작게 18 → 크게 44(글자 높이) → 중간 28), 글자와 안 겹침
+    const TDEF = [{ s: 18, off: 18 }, { s: 44, off: 52 }, { s: 28, off: 95 }];
+    for (const t of TDEF) {
+      ctx.font = t.s + 'px Menlo, Consolas, monospace';
+      ctx.fillText('🏆', L.x0 + t.off, L.titleY);
+      ctx.fillText('🏆', L.x0 + L.tableW - t.off, L.titleY);
     }
     // 컬럼 헤더
     ctx.font = 'bold 13px Menlo, Consolas, monospace';
@@ -855,6 +902,16 @@
     for (let i = 0; i < rankViz.bombs.length; i++) { // 폭탄 — 게임과 동일한 모양
       const b = rankViz.bombs[i];
       drawBombShape(b.x, b.y, b.y);
+    }
+    // 하단 패들 미니 연출 — 게임과 동일한 네온 패들 + 총알 트레이서
+    ctx.fillStyle = rankViz.pad.hurt > 0 ? '#ffffff' : '#22e6ff';
+    ctx.shadowColor = '#22e6ff'; ctx.shadowBlur = 12;
+    ctx.beginPath(); ctx.roundRect(rankViz.pad.x - rankViz.pad.w / 2, L.padY - 5, rankViz.pad.w, 9, 5); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#8ff4ff';
+    for (let i = 0; i < rankViz.shots.length; i++) {
+      const s = rankViz.shots[i];
+      ctx.fillRect(s.x - 1, s.y - 6, 2, 10);
     }
     // 파티클 재렌더 — 오버레이 딤(0.94)에 가려지지 않게 위에 다시 그림 (펑펑 연출)
     for (let i = 0; i < state.particles.length; i++) {
