@@ -584,8 +584,8 @@
   }
   function rankCellAt(x, y) {
     const L = rankLayout();
-    if (y < L.laneY - 22 || y > L.listTop - 4) return -1; // 몹 레인~벽돌~헤더 텍스트(등수~날짜)까지 선택 가능
-    for (let c = 1; c <= 5; c++) if (x >= L.cols[c].x && x <= L.cols[c].x + L.cols[c].w) return c;
+    if (y < L.laneY - 22 || y > L.listTop - 4) return -1; // 몹 레인~벽돌~헤더 텍스트까지 선택 가능
+    for (let c = 0; c <= 5; c++) if (x >= L.cols[c].x && x <= L.cols[c].x + L.cols[c].w) return c; // 등수 컬럼(0) 포함
     return -1;
   }
   function rankRowAt(x, y) {
@@ -760,21 +760,53 @@
     ctx.beginPath(); ctx.arc(bx + look, by, 3, 0, Math.PI * 2); ctx.fill();
     ctx.shadowBlur = 0;
   }
+  // 이니셜 렌더 — 아이템 문자(ⓆⓇⒷⓌⒺⓂⓈ)는 게임 드롭과 동일한 색 동그라미+색 글자로
+  function drawRankName(name, cx, y, color) {
+    const chs = Array.from(name);
+    const cw = 15;
+    let x = cx - (chs.length - 1) * cw / 2;
+    for (let i = 0; i < chs.length; i++) {
+      const itm = ENTRY_ITEM_TOKENS[chs[i]];
+      if (itm) {
+        const cy = y - 5;
+        ctx.strokeStyle = itm.color; ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.arc(x, cy, 7, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = itm.color;
+        ctx.font = 'bold 9px Menlo, Consolas, monospace';
+        ctx.fillText(itm.letter, x, cy + 3);
+      } else {
+        ctx.fillStyle = color;
+        ctx.font = 'bold 14px Menlo, Consolas, monospace';
+        ctx.fillText(chs[i], x, y);
+      }
+      x += cw;
+    }
+  }
   function drawRankViz() {
     const L = rankLayout();
     ctx.fillStyle = 'rgba(5, 8, 16, 0.94)';
     ctx.fillRect(-10, -10, W + 20, H + 20);
-    // 제목(30px = 큰 트로피와 동일 크기) — 좌우 트로피 5개씩, 각 줄 가운데(3번째)는 1.5배 크게·위로
+    // 제목 — GLOBAL RANKING: 세리프 이탤릭 + 자간 + 골드 그라데이션 + 글로우 (엘레강스 × 네온)
     ctx.textAlign = 'center';
-    const title = fdb ? '글로벌 랭킹' : '랭킹 기록';
-    ctx.font = 'bold 30px Menlo, Consolas, monospace';
-    ctx.fillStyle = '#22e6ff'; ctx.shadowColor = '#22e6ff'; ctx.shadowBlur = 16;
+    const title = fdb ? 'GLOBAL RANKING' : 'RANKING';
+    ctx.save();
+    ctx.font = 'italic bold 27px Georgia, "Palatino Linotype", "Times New Roman", serif';
+    try { ctx.letterSpacing = '5px'; } catch (e) {} // 미지원 브라우저는 자간 없이 표시
+    const tg = ctx.createLinearGradient(0, L.titleY - 22, 0, L.titleY + 6);
+    tg.addColorStop(0, '#fff3c4');
+    tg.addColorStop(0.55, '#ffd700');
+    tg.addColorStop(1, '#c98f1b');
+    ctx.fillStyle = tg;
+    ctx.shadowColor = 'rgba(255, 215, 0, 0.75)';
+    ctx.shadowBlur = 18;
     ctx.fillText(title, W / 2, L.titleY);
     ctx.shadowBlur = 0;
+    ctx.restore();
+    // 트로피 — 좌우 5개씩, 가운데(제목)로 갈수록 커지는 계단형 (16→30px)
+    const TSIZE = [16, 19, 22, 26, 30];
     for (let s = 0; s < 5; s++) {
-      const big = s === 2;
-      ctx.font = (big ? '30px' : '20px') + ' Menlo, Consolas, monospace';
-      const ty = big ? L.titleY - 6 : L.titleY;
+      ctx.font = TSIZE[s] + 'px Menlo, Consolas, monospace';
+      const ty = L.titleY - (TSIZE[s] - 16) * 0.35;
       ctx.fillText('🏆', L.x0 + 14 + s * 30, ty);
       ctx.fillText('🏆', L.x0 + L.tableW - 14 - s * 30, ty);
     }
@@ -807,7 +839,8 @@
       ctx.textAlign = 'center';
       ctx.font = (rank <= 3 ? 'bold ' : '') + '14px Menlo, Consolas, monospace';
       ctx.fillStyle = medal; ctx.fillText(String(rank), L.cols[0].cx, y);
-      ctx.fillStyle = rank <= 3 ? medal : '#22e6ff'; ctx.fillText(r.name || '---', L.cols[1].cx, y);
+      drawRankName(r.name || '---', L.cols[1].cx, y, rank <= 3 ? medal : '#22e6ff');
+      ctx.font = (rank <= 3 ? 'bold ' : '') + '14px Menlo, Consolas, monospace';
       ctx.fillStyle = '#cfe6ff'; ctx.fillText(fmtNum(r.score || 0), L.cols[2].cx, y);
       ctx.fillStyle = '#ffd0f5'; ctx.fillText(fmtNum(rankCum(r)), L.cols[3].cx, y);
       ctx.fillStyle = '#8fe0ff'; ctx.fillText('LV' + (r.level || 1), L.cols[4].cx, y);
@@ -832,7 +865,7 @@
     }
     ctx.globalAlpha = 1;
     drawRankBoss(rankViz.bossX, L.laneY);
-    drawUiButton(recordsCloseRect(), selRecordName ? '▶ ' + selRecordName + ' 로 시작' : '행 선택 후 시작', selRecordName ? '#2effc8' : '#5f7396');
+    drawUiButton(recordsCloseRect(), selRecordName ? '▶ ' + selRecordName + ' 로 시작' : '이니셜 선택 후 시작', selRecordName ? '#2effc8' : '#5f7396');
   }
   function openRecords() {
     selRecordName = null;
@@ -1202,8 +1235,8 @@
     'Ⓜ': { letter: 'M', color: '#7f7bff' },  // 멀티볼
     'Ⓢ': { letter: 'S', color: '#ff9a3d' },  // 패들 축소
   };
-  const ENTRY_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
-    .concat(['💖', '💙', '🏆', '💣'])                                                      // 하트(빨강/파랑)·트로피·폭탄
+  const ENTRY_CHARS = ['💖', '💙', '🏆', '💣']                                             // 하트(빨강·파랑)·트로피·폭탄 — 맨 앞
+    .concat('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''))
     .concat(['🐭', '🐮', '🐯', '🐰', '🐲', '🐍', '🐴', '🐑', '🐵', '🐔', '🐶', '🐷'])      // 12지신
     .concat(Object.keys(ENTRY_ITEM_TOKENS));                                               // 아이템 7종
   const ENTRY_SLOT = { w: 62, h: 96, gap: 20, y: 392 };
@@ -1237,7 +1270,7 @@
     const chs = Array.from(currentPlayer || '');
     for (let i = 0; i < 3; i++) {
       const ci = ENTRY_CHARS.indexOf((chs[i] || 'A').toUpperCase());
-      entryPos[i] = ci >= 0 ? ci : 10;
+      entryPos[i] = ci >= 0 ? ci : ENTRY_CHARS.indexOf('A');
       entryVel[i] = 0;
     }
     entryActive = 0;
@@ -3334,8 +3367,8 @@
       }
     }
 
-    // 토스트 — 오버레이 위에 그려서 항상 보이게
-    if (state.toast) {
+    // 토스트 — 오버레이 위에 그려서 항상 보이게 (단, 글로벌 랭킹 화면에선 잭팟·콤보 등 큰 글자 숨김 — 읽기 방해 방지)
+    if (state.toast && !recordsOpen) {
       ctx.globalAlpha = Math.min(1, state.toast.life / 30);
       ctx.fillStyle = state.toast.color;
       ctx.shadowColor = state.toast.color;
