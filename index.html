@@ -756,15 +756,16 @@
     shoot:  () => {
       if (!audio) return;
       const t = audio.currentTime;
-      tone(750 + Math.random() * 350, t, 0.07, 'square', 0.192, -520);
-      noise(t, 0.035, 0.192, 3200);
+      tone(750 + Math.random() * 350, t, 0.07, 'square', 0.096, -520);
+      noise(t, 0.035, 0.096, 3200);
     },
     // 폭탄 레이저 발사 — 묵직한 '퉁!'
     bombShot: () => {
       if (!audio) return;
       const t = audio.currentTime;
-      tone(190, t, 0.18, 'sine', 0.09, -110);
-      noise(t, 0.08, 0.05, 700);
+      const g = state.buffs.rapid > 0 ? 1.5 : 1; // 폭탄레이저 + 고속연사 겹칠 때 '두두두' 1.5배
+      tone(190, t, 0.18, 'sine', 0.09 * g, -110);
+      noise(t, 0.08, 0.05 * g, 700);
     },
     brick:  (combo = 0) => beep(520 + Math.min(combo, 20) * 45 + Math.random() * 220, 0.12, 'triangle', 0.07, 300),
     bounce: () => beep(220, 0.06, 'sine', 0.05, 80),
