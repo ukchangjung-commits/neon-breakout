@@ -142,8 +142,8 @@
     position: fixed;                 /* 화면 정중앙 고정 모달 */
     left: 50%;
     top: 50%;
-    transform: translate(-50%, -50%);
-    width: min(1080px, 96vw);
+    transform: translate(-50%, -50%) scaleX(0.9); /* 장평 90% ({타이포기본}) */
+    width: min(1190px, 96vw);                     /* 장평 보정으로 실질 폭 유지 */
     max-height: 92vh;
     overflow-y: auto;
     scrollbar-width: none;           /* 우측 스크롤바 숨김 (넘치면 바 없이 내부 스크롤) */
@@ -153,17 +153,18 @@
     box-shadow: 0 0 44px rgba(34, 230, 255, 0.35), 0 12px 48px rgba(0, 0, 0, 0.6);
     padding: 18px 24px 20px;
     font-size: 21px;                 /* 1.5배 확대 */
-    letter-spacing: -0.02em;         /* 자간 조밀 */
+    letter-spacing: -0.05em;         /* 자간 60% 축소 ({타이포기본}) */
     color: var(--text);
-    line-height: 1.45;               /* 줄간 타이트 — 무스크롤 목표 */
+    line-height: 1.8;                /* 줄간격 = 폰트 세로 크기의 80% ({타이포기본}) */
     z-index: 50;
     text-align: left;
   }
   .help-panel::-webkit-scrollbar { display: none; } /* 크롬·엣지 스크롤바 숨김 */
   .help-panel .htitle { text-align: center; font-size: 26px; font-weight: 700; color: var(--cyan);
     text-shadow: 0 0 12px rgba(34, 230, 255, 0.5); margin-bottom: 2px; }
-  .help-panel .hsub { text-align: center; font-size: 14px; color: var(--dim); margin-bottom: 6px; }
-  .help-panel h3 { margin: 12px 0 3px; font-size: 19px; color: var(--cyan); letter-spacing: 0.04em; }
+  .help-panel .hsub { text-align: center; font-size: 14px; color: var(--dim); margin-bottom: 0.5em; }
+  .help-panel h3 { margin: 1.3em 0 0.15em; font-size: 19px; color: var(--cyan); letter-spacing: 0.04em; } /* 절급 위계 — 본문 줄간(0.8em)의 1.6배 */
+  .help-panel .hgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; } /* 범례류 — 단 분리 ({타이포기본}) */
   .help-panel.open { display: block; }
   .help-panel kbd {
     border: 1px solid var(--line);
@@ -382,7 +383,15 @@
     마우스 또는 <kbd>←</kbd><kbd>→</kbd> 이동 · <kbd>Space</kbd> 공 발사 / <b>일시정지</b> · <kbd>X</kbd> 또는 <b>클릭(꾹)</b> 레이저 · <kbd>N</kbd> 새 게임 · <kbd>F</kbd>/⛶ 전체 화면<br>
     화면 클릭 = <b>마우스 게임 고정</b>(<kbd>ESC</kbd> 해제) · 🔊 소리는 첫 클릭 후 시작 — 상단 🔊 버튼으로 켜고 끔
     <h3>🎁 아이템 & 세트</h3>
-    <span style="color:#ffc233">Q</span> 4줄레이저 · <span style="color:#22e6ff">R</span> 고속연사 · <span style="color:#ff3df0">B</span> 폭탄레이저 · <span style="color:#2effc8">W</span> 패들확장(손상 시 <b>한 단계 수리</b>) · <span style="color:#c95cff">E</span> 에너지충전 · <span style="color:#7f7bff">M</span> 멀티볼 · <span style="color:#ff9a3d">S</span> <b>패들 축소(함정!)</b><br>
+    <div class="hgrid">
+      <span><span style="color:#ffc233">Q</span> 4줄레이저</span>
+      <span><span style="color:#2effc8">W</span> 패들확장 (손상 시 <b>한 단계 수리</b>)</span>
+      <span><span style="color:#22e6ff">R</span> 고속연사</span>
+      <span><span style="color:#c95cff">E</span> 에너지충전</span>
+      <span><span style="color:#ff3df0">B</span> 폭탄레이저</span>
+      <span><span style="color:#7f7bff">M</span> 멀티볼</span>
+      <span><span style="color:#ff9a3d">S</span> <b>패들 축소 (함정!)</b></span>
+    </div>
     <span style="color:#22e6ff">R</span>·<span style="color:#ff3df0">B</span>를 먹으면 우상단 <b>세트 적립(각 최대 5)</b> — <kbd>Q</kbd>/휠클릭 = <b>탄창 25연발(현재 무장 그대로 — 폭탄 장착 중이면 폭탄 연발!)</b> · <kbd>W</kbd>/우클릭 = <b>폭탄 5연발</b> (에너지 소모 없음)<br>
     💡 폭탄레이저+고속연사+에너지 30%↑가 겹치면 <b>최대출력 두두두</b> 사운드!
     <h3>💣 낙하물 & 하트</h3>
