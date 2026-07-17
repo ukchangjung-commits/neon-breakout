@@ -2159,7 +2159,7 @@
       const appMod = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js');
       fsm = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
       fdb = fsm.getFirestore(appMod.initializeApp(FIREBASE_CONFIG));
-      migratePlayers().then(wipeCloudRank).then(refreshCloudTop); // 1회 구조 이전 → 전체 초기화(서버 플래그) → 랭킹 로드
+      migratePlayers().then(wipeCloudRank).then(seedCloudRank).then(refreshCloudTop); // 구조 이전 → 초기화 → 시드 10명 → 랭킹 로드 (각 1회)
     } catch (e) { fdb = null; }
   }
   // 집계 구조 — 'players' 컬렉션: 이니셜당 문서 1개. cum=서버 원자 누적(increment, 다기기 합산 정확), score/level=max 병합.
@@ -2229,6 +2229,35 @@
       }
       await fsm.setDoc(metaRef, { wipe1: true, legacyOff: true, wipedAt: Date.now() }, { merge: true });
       legacyOff = true;
+    } catch (e) {}
+  }
+  // 시드 데이터 — 서버 플래그(_meta.seed1)로 전 세계 1회: 샘플 사용자 10명 (BEST 1,000~40,000)
+  async function seedCloudRank() {
+    if (!fdb) return;
+    try {
+      const metaRef = fsm.doc(fdb, 'players', '_meta');
+      const meta = await fsm.getDoc(metaRef);
+      if (meta.exists() && meta.data().seed1) return; // 이미 실행됨
+      const now = Date.now();
+      const SEED = [
+        { name: 'ACE', score: 38500, cum: 52300, level: 8, d: 0.2 },
+        { name: 'NEO', score: 31200, cum: 44800, level: 7, d: 0.8 },
+        { name: 'KAI', score: 27450, cum: 27450, level: 6, d: 1.1 },
+        { name: 'ZED', score: 22800, cum: 35100, level: 5, d: 1.6 },
+        { name: 'MAX', score: 18900, cum: 21600, level: 5, d: 2.0 },
+        { name: 'LUX', score: 14300, cum: 26750, level: 4, d: 2.4 },
+        { name: 'REX', score: 9850, cum: 12400, level: 3, d: 3.1 },
+        { name: 'SKY', score: 6200, cum: 6200, level: 2, d: 3.8 },
+        { name: 'JIN', score: 3400, cum: 5150, level: 2, d: 4.3 },
+        { name: 'BOM', score: 1250, cum: 1250, level: 1, d: 4.9 },
+      ];
+      for (const s of SEED) {
+        const ts = now - Math.round(s.d * 86400000); // 최근 0.2~5일 분산
+        await fsm.setDoc(fsm.doc(fdb, 'players', s.name), {
+          name: s.name, score: s.score, cum: s.cum, level: s.level, ts: ts, when: fmtWhen(ts),
+        }, { merge: true });
+      }
+      await fsm.setDoc(metaRef, { seed1: true, seededAt: now }, { merge: true });
     } catch (e) {}
   }
   async function refreshCloudTop() {
