@@ -816,8 +816,9 @@
       c4.ovy += 0.32; c4.oy += c4.ovy;
       if (c4.oy >= 0) { c4.oy = 0; c4.ovy = 0; }
     }
-    const contentH = guideMode ? guideContentH() : rankViz.order.length * L.rowH; // 안내 모드는 본문 높이 기준
-    const maxScroll = Math.max(0, contentH - L.listH);
+    const maxScroll = guideMode
+      ? (function () { const gm = guideMetrics(L); return Math.max(0, gm.need - gm.areaH); })() // 자동 압축이라 보통 0 = 무스크롤
+      : Math.max(0, rankViz.order.length * L.rowH - L.listH);
     state.rankScroll = Math.max(0, Math.min(state.rankScroll, maxScroll));
     for (let i = 0; i < rankViz.order.length; i++) {
       const r = rankViz.order[i];
@@ -968,15 +969,22 @@
     [{ t: 'Q/마우스 휠클릭:탄창 25연발(현재무장 상태에서 고속으로 25발 발사)', c: '#cfe6ff' }],
     [{ t: 'W/마우스 우클릭 = 폭탄 5연발(에너지 무소모)', c: '#cfe6ff' }],
     [{ t: '🎁 아이템 & 세트', c: '#22e6ff', h: 1 }],
-    [{ icon: 'Q' }, { t: ' 4줄레이저', c: '#ffc233' }, { t: '   ', c: '#5f7396' }, { icon: 'R' }, { t: ' 고속연사', c: '#22e6ff' }, { t: '   ', c: '#5f7396' }, { icon: 'B' }, { t: ' 폭탄레이저', c: '#ff3df0' }, { t: '   ', c: '#5f7396' }, { icon: 'W' }, { t: ' 패들확장(손상 수리)', c: '#2effc8' }],
-    [{ icon: 'E' }, { t: ' 에너지충전', c: '#c95cff' }, { t: '   ', c: '#5f7396' }, { icon: 'M' }, { t: ' 멀티볼', c: '#7f7bff' }, { t: '   ', c: '#5f7396' }, { icon: 'S' }, { t: ' 패들 축소', c: '#ff9a3d' }],
+    { cx: [0, 140, 265, 405], cells: [ // 아이템 4열 — 아랫줄과 세로 맞춤
+      [{ icon: 'Q' }, { t: ' 4줄레이저', c: '#ffc233' }],
+      [{ icon: 'R' }, { t: ' 고속연사', c: '#22e6ff' }],
+      [{ icon: 'B' }, { t: ' 폭탄레이저', c: '#ff3df0' }],
+      [{ icon: 'W' }, { t: ' 패들확장(손상 수리)', c: '#2effc8' }],
+    ] },
+    { cx: [0, 140, 265], cells: [
+      [{ icon: 'E' }, { t: ' 에너지충전', c: '#c95cff' }],
+      [{ icon: 'M' }, { t: ' 멀티볼', c: '#7f7bff' }],
+      [{ icon: 'S' }, { t: ' 패들 축소', c: '#ff9a3d' }],
+    ] },
     [{ icon: 'R' }, { t: '·', c: '#5f7396' }, { icon: 'B' }, { t: ' 는 우상단 세트 적립(각5)  ·  폭탄+고속연사+에너지 30%↑ : 최대 출력 사운드', c: '#cfe6ff' }],
     [{ t: '💣 낙하물 & 하트', c: '#22e6ff', h: 1 }],
     [{ t: '콤보 2+ 벽돌 파괴 시 낙하 — 약 1/3 아이템(받기) · 2/3 폭탄(피하거나 격추 +15점)', c: '#cfe6ff' }],
     [{ t: '폭탄 피격: 1회 패들 1/2 → 2회 1/4+경고 → 3회 하트 −1 (새 하트 = 복구)', c: '#cfe6ff' }],
-    [{ t: '배경 CI 번쩍:', c: '#cfe6ff' }, { t: '♥분홍 = 목숨+1(30,000점마다)', c: '#ff5577' }, { t: ' · ', c: '#5f7396' }, { t: '♥파랑 = 보호막 7초(폭탄 파괴·공 난반사)', c: '#3fa9ff' }],
-    [{ t: '🧱 벽돌 & 강화 블럭', c: '#22e6ff', h: 1 }],
-    [{ t: '패턴12종 순환 · 색동 단계마다 강화 블럭 +1(최대9)', c: '#cfe6ff' }],
+    [{ t: '배경 CI 번쩍:', c: '#cfe6ff' }, { t: '♥', c: '#ff5577' }, { t: ' = 목숨+1(30,000점마다)', c: '#cfe6ff' }, { t: ' · ', c: '#5f7396' }, { t: '♥', c: '#3fa9ff' }, { t: ' = 보호막 7초(폭탄 파괴·공 난반사)', c: '#cfe6ff' }],
     [{ t: '👾 보스전 (4레벨마다)', c: '#22e6ff', h: 1 }],
     [{ t: '실드 벽돌이 남아있을수록 반사 확률↑ 눈=몸 색이면 반사 모드(공격 무효+폭탄 반격)', c: '#cfe6ff' }],
     [{ t: '🏆 12지신 & 완주', c: '#22e6ff', h: 1 }],
@@ -985,10 +993,21 @@
   ];
   const GUIDE_FS = 16, GUIDE_LH = Math.round(GUIDE_FS * 1.8), GUIDE_HGAP = Math.round(GUIDE_FS * 0.8 * 1.6); // {타이포기본}
   const GUIDE_ICON_COLORS = { Q: '#ffc233', R: '#22e6ff', B: '#ff3df0', W: '#2effc8', E: '#c95cff', M: '#7f7bff', S: '#ff9a3d' };
-  function guideContentH() {
-    let h = 26;
-    for (const ln of GUIDE_LINES) { if (Array.isArray(ln) && ln[0].h) h += GUIDE_HGAP; h += GUIDE_LH; }
-    return h + 8;
+  // 안내 배치 — 벽돌 바로 아래부터 시작(본문 두 줄 상향), 넘치면 줄간 자동 축소로 스크롤 없이 전체 표시
+  function guideMetrics(L) {
+    const gTop = L.brickY + L.brickH + 8;
+    const areaH = (L.padY - 14) - gTop;
+    const heads = GUIDE_LINES.filter(l => Array.isArray(l) && l[0] && l[0].h).length;
+    let lh = GUIDE_LH, hg = GUIDE_HGAP;
+    const base = 30;
+    let need = base + GUIDE_LINES.length * lh + heads * hg;
+    if (need > areaH) { // 자동 압축
+      const k = (areaH - base) / (GUIDE_LINES.length * lh + heads * hg);
+      lh = Math.max(19, Math.floor(lh * k));
+      hg = Math.max(8, Math.floor(hg * k));
+      need = base + GUIDE_LINES.length * lh + heads * hg;
+    }
+    return { gTop: gTop, areaH: areaH, lh: lh, hg: hg, need: need };
   }
   // 세그먼트 렌더 — {icon}=실제 아이템 아이콘(원판+색 글자), {t,c}=텍스트. x 진행값 반환
   function drawGuideSegs(segs, x, y, head) {
@@ -1000,9 +1019,9 @@
         ctx.beginPath(); ctx.arc(x + 9, y - 5, 8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
         ctx.shadowBlur = 0;
         ctx.fillStyle = c; ctx.font = 'bold 9px Menlo, Consolas, monospace';
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(seg.icon, x + 9, y - 4); // 원 중심 광학 보정 (+1px)
-        ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+        ctx.textAlign = 'center';
+        ctx.fillText(seg.icon, x + 9, y - 2); // 원 중심(y−5) + 캡높이 절반(≈3px) = 알파벳 정중앙
+        ctx.textAlign = 'left';
         x += 20;
       } else {
         ctx.font = (head ? 'bold ' + (GUIDE_FS + 1) : GUIDE_FS) + 'px Menlo, Consolas, monospace';
@@ -1014,23 +1033,26 @@
     return x;
   }
   function drawGuideBody(L) {
+    const gm = guideMetrics(L);
     ctx.save();
-    ctx.beginPath(); ctx.rect(L.x0 - 6, L.listTop, L.tableW + 12, L.listH); ctx.clip();
+    ctx.beginPath(); ctx.rect(L.x0 - 6, gm.gTop, L.tableW + 12, gm.areaH); ctx.clip();
     try { ctx.letterSpacing = '-1.6px'; } catch (e) {} // 자간 −0.1em (16px 기준)
     ctx.textAlign = 'left';
-    const CX = [L.x0 + 8, L.x0 + L.tableW * 0.36, L.x0 + L.tableW * 0.75]; // 3단 열 위치 (아래 줄도 동일 열 맞춤)
-    let y = L.listTop + 26 - state.rankScroll;
+    const CX = [L.x0 + 8, L.x0 + L.tableW * 0.36, L.x0 + L.tableW * 0.75 + 32]; // 3열(N/소리끄기)은 두 칸(+32px) 우측, 위아래 동일 열
+    let y = gm.gTop + 22 - state.rankScroll;
     for (const ln of GUIDE_LINES) {
       const head = Array.isArray(ln) && ln[0].h;
-      if (head) y += GUIDE_HGAP;
-      if (y > L.listTop - 12 && y < L.listTop + L.listH + GUIDE_LH) {
-        if (ln.c3) {
+      if (head) y += gm.hg;
+      if (y > gm.gTop - 12 && y < gm.gTop + gm.areaH + gm.lh) {
+        if (ln.cells) { // 고정 열 — 아이템 세로 정렬
+          for (let k = 0; k < ln.cells.length; k++) drawGuideSegs(ln.cells[k], L.x0 + 8 + ln.cx[k], y, false);
+        } else if (ln.c3) {
           for (let k = 0; k < 3; k++) if (ln.c3[k]) drawGuideSegs(ln.c3[k], CX[k], y, false);
         } else {
           drawGuideSegs(ln, CX[0], y, head);
         }
       }
-      y += GUIDE_LH;
+      y += gm.lh;
     }
     try { ctx.letterSpacing = '0px'; } catch (e) {}
     ctx.restore();
