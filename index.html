@@ -3713,16 +3713,16 @@
         ctx.fillText(ph === 'novice' ? 'DEMO — 초보 모드 🐣' : 'DEMO — 프로 모드 😎', W / 2, H / 2 - 80);
       }
 
-      // 아이템 안내 (범례)
+      // 아이템 안내 (범례) — 실제 게임 드롭과 동일한 모양(색 동그라미+색 글자, 폭탄은 진짜 폭탄)
       const LEGEND = [
-        ['Q  4줄 레이저', '#ffc233'],
-        ['R  고속 연사 (+세트 적립)', '#22e6ff'],
-        ['B  폭탄 레이저 (+세트 적립)', '#ff3df0'],
-        ['W  패들 확장 / 손상 수리', '#2effc8'],
-        ['E  에너지 충전', '#c95cff'],
-        ['M  멀티볼', '#7f7bff'],
-        ['S  패들 축소 — 함정!', '#ff9a3d'],
-        ['💣 폭탄 — 피하거나 격추(+15점)', '#ff5555'],
+        { l: 'Q', c: '#ffc233', t: '4줄 레이저' },
+        { l: 'R', c: '#22e6ff', t: '고속 연사 (+세트 적립)' },
+        { l: 'B', c: '#ff3df0', t: '폭탄 레이저 (+세트 적립)' },
+        { l: 'W', c: '#2effc8', t: '패들 확장 / 손상 수리' },
+        { l: 'E', c: '#c95cff', t: '에너지 충전' },
+        { l: 'M', c: '#7f7bff', t: '멀티볼' },
+        { l: 'S', c: '#ff9a3d', t: '패들 축소 — 함정!' },
+        { bomb: true, c: '#ff5555', t: '폭탄 — 피하거나 격추(+15점)' },
       ];
       const legendY = H / 2 + 205;
       ctx.fillStyle = '#5f7396';
@@ -3733,12 +3733,34 @@
           ? '난이도 — 클릭으로 선택 (현재: 자동 ' + (diffStage() + 1) + '단계)'
           : '난이도 — ' + (manualStage + 1) + '단계 선택됨 (다시 누르면 자동)',
         W / 2, legendY - 28);
-      ctx.font = 'bold 15px Menlo, Consolas, monospace';
-      ctx.textAlign = 'left';
       for (let i = 0; i < LEGEND.length; i++) {
         const col = i % 2, row = Math.floor(i / 2);
-        ctx.fillStyle = LEGEND[i][1];
-        ctx.fillText(LEGEND[i][0], W / 2 - 250 + col * 270, legendY + row * 30);
+        const lx = W / 2 - 250 + col * 270, ly = legendY + row * 30;
+        const it = LEGEND[i];
+        if (it.bomb) {
+          drawBombShape(lx + 10, ly - 4, 40); // 실제 폭탄 모양 (고정 위상)
+        } else { // 실제 드롭과 동일 — 어두운 원판 + 색 테두리 + 글로우 + 색 글자
+          ctx.fillStyle = '#0d1426';
+          ctx.strokeStyle = it.c;
+          ctx.lineWidth = 2;
+          ctx.shadowColor = it.c;
+          ctx.shadowBlur = 10;
+          ctx.beginPath();
+          ctx.arc(lx + 10, ly - 5, 10, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+          ctx.fillStyle = it.c;
+          ctx.font = 'bold 11px Menlo, Consolas, monospace';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(it.l, lx + 10, ly - 4);
+          ctx.textBaseline = 'alphabetic';
+        }
+        ctx.textAlign = 'left';
+        ctx.fillStyle = it.c;
+        ctx.font = 'bold 15px Menlo, Consolas, monospace';
+        ctx.fillText(it.t, lx + 26, ly);
       }
       ctx.textAlign = 'center';
 
