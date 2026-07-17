@@ -153,7 +153,7 @@
     box-shadow: 0 0 44px rgba(34, 230, 255, 0.35), 0 12px 48px rgba(0, 0, 0, 0.6);
     padding: 18px 24px 20px;
     font-size: 21px;                 /* 1.5배 확대 */
-    letter-spacing: -0.05em;         /* 자간 60% 축소 ({타이포기본}) */
+    letter-spacing: -0.1em;          /* 자간 −0.1em ({타이포기본} 지시 갱신) */
     color: var(--text);
     line-height: 1.8;                /* 줄간격 = 폰트 세로 크기의 80% ({타이포기본}) */
     z-index: 50;
@@ -543,7 +543,7 @@
   function recordsBtnRect() { const w = Math.min(210, W * 0.34); return { x: W / 2 + 8, y: H / 2 + 36, w: w, h: 46 }; }
   function recordsCloseRect() { const w = Math.min(600, W - 36); return { x: W / 2 - w / 2, y: H - 58, w: w, h: 44 }; } // 표(벽돌 그리드)와 동일 폭
   // ==== 글로벌 랭킹 인터랙티브 (보스 패트롤 + 폭탄 소트 + 방어모드) — 열리면 뒤 게임(데모)은 자동 포즈 ====
-  let selRecordName = null;
+  let selRecordName = null, guideMode = false; // guideMode = 안내 화면(랭킹 화면 재사용, 표 자리만 안내 본문)
   const rankViz = { order: [], bossCol: 2, bossX: 0, dir: 1, timer: 600, mode: 'patrol', defendT: 0, shields: 0, parts: 0, bombs: [], brickT: [], flash: 0, t: 0, hurt: 0, hitT: 900, pad: { x: 0, vx: 2.2, w: 46, hurt: 0, shootT: 180, muzzle: 0 }, shots: [], leaves: [], coll: [], collDrop: [], paused: false };
   const RANK_COL_LABELS = ['RANK', 'INITIAL', 'BEST', 'TOTAL', 'LEVEL', 'DATE'];
   const RANK_ZODIAC = ['🐭', '🐮', '🐯', '🐰', '🐲', '🐍', '🐴', '🐑', '🐵', '🐔', '🐶', '🐷'];
@@ -816,7 +816,8 @@
       c4.ovy += 0.32; c4.oy += c4.ovy;
       if (c4.oy >= 0) { c4.oy = 0; c4.ovy = 0; }
     }
-    const maxScroll = Math.max(0, rankViz.order.length * L.rowH - L.listH);
+    const contentH = guideMode ? guideContentH() : rankViz.order.length * L.rowH; // 안내 모드는 본문 높이 기준
+    const maxScroll = Math.max(0, contentH - L.listH);
     state.rankScroll = Math.max(0, Math.min(state.rankScroll, maxScroll));
     for (let i = 0; i < rankViz.order.length; i++) {
       const r = rankViz.order[i];
@@ -958,6 +959,58 @@
       x += cw;
     }
   }
+  // 안내 본문 — 세그먼트 배열 = 한 줄({t,c}), h=1이면 섹션 제목(절급 위계 — 본문 줄간의 1.6배 여백)
+  const GUIDE_LINES = [
+    [{ t: '🎮 조작', c: '#22e6ff', h: 1 }],
+    [{ t: '마우스 또는 ←→ 이동 · Space 공 발사/일시정지 · X 또는 클릭(꾹) 레이저', c: '#cfe6ff' }],
+    [{ t: 'N 새 게임 · F/⛶ 전체 화면 · 화면 클릭 = 마우스 고정(ESC 해제) · 🔊 소리는 첫 클릭 후', c: '#cfe6ff' }],
+    [{ t: '🎁 아이템 & 세트', c: '#22e6ff', h: 1 }],
+    [{ t: 'Q 4줄레이저', c: '#ffc233' }, { t: '  ·  ', c: '#5f7396' }, { t: 'R 고속연사', c: '#22e6ff' }, { t: '  ·  ', c: '#5f7396' }, { t: 'B 폭탄레이저', c: '#ff3df0' }, { t: '  ·  ', c: '#5f7396' }, { t: 'W 패들확장(손상 수리)', c: '#2effc8' }],
+    [{ t: 'E 에너지충전', c: '#c95cff' }, { t: '  ·  ', c: '#5f7396' }, { t: 'M 멀티볼', c: '#7f7bff' }, { t: '  ·  ', c: '#5f7396' }, { t: 'S 패들 축소 — 함정!', c: '#ff9a3d' }],
+    [{ t: 'R·B는 우상단 세트 적립(각 5) — Q/휠클릭 = 탄창 25연발(현재 무장 그대로!)', c: '#cfe6ff' }],
+    [{ t: 'W/우클릭 = 폭탄 5연발(에너지 무소모) · 폭탄+고속연사+에너지 30%↑ = 최대출력 두두두!', c: '#cfe6ff' }],
+    [{ t: '💣 낙하물 & 하트', c: '#22e6ff', h: 1 }],
+    [{ t: '콤보 2+ 벽돌 파괴 시 낙하 — 약 1/3 아이템(받기) · 2/3 폭탄(피하거나 격추 +15점)', c: '#cfe6ff' }],
+    [{ t: '폭탄 피격: 1회 패들 1/2 → 2회 1/4+경고 → 3회 목숨 −1 (새 목숨 = 복구)', c: '#cfe6ff' }],
+    [{ t: 'CI 번쩍 → ♥분홍 = 목숨+1(30,000점마다) · ♥파랑 = 보호막 7초(폭탄 파괴·공 난반사)', c: '#cfe6ff' }],
+    [{ t: '🧱 벽돌 & 강화 블럭', c: '#22e6ff', h: 1 }],
+    [{ t: '패턴 12종 순환 · 색동 단계마다 강철 블럭 +1(최대 9) — 10발 격파(9칸 게이지), 폭발 −4', c: '#cfe6ff' }],
+    [{ t: '👾 보스전 (4레벨마다)', c: '#22e6ff', h: 1 }],
+    [{ t: '실드 벽돌을 다 깰 때까지 무적(청록 돔) · 눈=몸 색이면 반사 모드(공격 무효+폭탄 반격)', c: '#cfe6ff' }],
+    [{ t: '실드 벽돌이 남아있을수록 반사 확률↑ · 잡을수록 모습 변화(480종)', c: '#cfe6ff' }],
+    [{ t: '🏆 12지신 & 완주', c: '#22e6ff', h: 1 }],
+    [{ t: '보스 1마리 = 지신 1개 90° 회전 → 12마리 = 색동띠 1단계 → 120마리 완주 = 폭죽+랭킹!', c: '#ffd700' }],
+    [{ t: '랭킹에서 이니셜 선택 후 시작 = 레벨 이어하기 + TOTAL 누적 · 이모지 이니셜 가능', c: '#cfe6ff' }],
+  ];
+  const GUIDE_FS = 16, GUIDE_LH = Math.round(GUIDE_FS * 1.8), GUIDE_HGAP = Math.round(GUIDE_FS * 0.8 * 1.6); // {타이포기본}
+  function guideContentH() {
+    let h = 26;
+    for (const ln of GUIDE_LINES) { if (ln[0].h) h += GUIDE_HGAP; h += GUIDE_LH; }
+    return h + 8;
+  }
+  function drawGuideBody(L) {
+    ctx.save();
+    ctx.beginPath(); ctx.rect(L.x0 - 6, L.listTop, L.tableW + 12, L.listH); ctx.clip();
+    try { ctx.letterSpacing = '-1.6px'; } catch (e) {} // 자간 −0.1em (16px 기준)
+    ctx.textAlign = 'left';
+    let y = L.listTop + 26 - state.rankScroll;
+    for (const ln of GUIDE_LINES) {
+      if (ln[0].h) y += GUIDE_HGAP;
+      if (y > L.listTop - 10 && y < L.listTop + L.listH + GUIDE_LH) {
+        let x = L.x0 + 8;
+        for (const seg of ln) {
+          ctx.font = (ln[0].h ? 'bold ' + (GUIDE_FS + 1) : GUIDE_FS) + 'px Menlo, Consolas, monospace';
+          ctx.fillStyle = seg.c;
+          ctx.fillText(seg.t, x, y);
+          x += ctx.measureText(seg.t).width;
+        }
+      }
+      y += GUIDE_LH;
+    }
+    try { ctx.letterSpacing = '0px'; } catch (e) {}
+    ctx.restore();
+    ctx.textAlign = 'center';
+  }
   function drawRankViz() {
     const L = rankLayout();
     ctx.fillStyle = 'rgba(5, 8, 16, 0.94)';
@@ -1010,11 +1063,13 @@
         ctx.fillText(DECO[i], dx, dy);
       }
     }
-    // 컬럼 헤더
-    ctx.font = 'bold 13px Menlo, Consolas, monospace';
-    for (let c = 0; c < 6; c++) {
-      ctx.fillStyle = (c === rankViz.bossCol) ? '#ffc233' : '#8fa8cf';
-      ctx.fillText(RANK_COL_LABELS[c], L.cols[c].cx, L.headY);
+    // 컬럼 헤더 — 안내 모드에선 데이터셋 부문이 안내 본문으로 교체되므로 생략
+    if (!guideMode) {
+      ctx.font = 'bold 13px Menlo, Consolas, monospace';
+      for (let c = 0; c < 6; c++) {
+        ctx.fillStyle = (c === rankViz.bossCol) ? '#ffc233' : '#8fa8cf';
+        ctx.fillText(RANK_COL_LABELS[c], L.cols[c].cx, L.headY);
+      }
     }
     // 벽돌 줄 — 등간격 그리드(컬럼 폭=벽돌 개수, 게임 비율 ≈1.9:1), 필드마다 색상, 개별 파괴/재생
     for (let c = 0; c < 6; c++) {
@@ -1027,6 +1082,9 @@
       }
       ctx.shadowBlur = 0;
     }
+    if (guideMode) {
+      drawGuideBody(L); // 안내 본문 — 데이터셋 자리 교체 ({타이포기본}·드래그/휠 스크롤 동일)
+    } else {
     // 데이터 표 — 버튼 위까지, 드래그/휠 스크롤 (스크롤바 없음)
     ctx.save();
     ctx.beginPath(); ctx.rect(L.x0 - 6, L.listTop, L.tableW + 12, L.listH); ctx.clip();
@@ -1062,6 +1120,7 @@
       ctx.fillStyle = '#5f7396'; ctx.font = '15px Menlo, Consolas, monospace'; ctx.textAlign = 'center';
       ctx.fillText('No records yet — be the first challenger!', W / 2, L.rowTop + 40);
     }
+    } // guideMode 분기 끝
     for (let i = 0; i < rankViz.bombs.length; i++) { // 폭탄 — 게임과 동일한 모양
       const b = rankViz.bombs[i];
       drawBombShape(b.x, b.y, b.y);
@@ -1127,15 +1186,22 @@
       ctx.fillText('⏸ PAUSED', W / 2, L.listTop + L.listH / 2);
       ctx.shadowBlur = 0;
     }
-    drawUiButton(recordsCloseRect(), selRecordName ? '▶ START AS ' + selRecordName : 'SELECT INITIAL TO START', selRecordName ? '#2effc8' : '#5f7396');
+    drawUiButton(recordsCloseRect(),
+      guideMode ? '안내 종료' : (selRecordName ? '▶ START AS ' + selRecordName : 'SELECT INITIAL TO START'),
+      (guideMode || selRecordName) ? '#2effc8' : '#5f7396');
   }
   function openRecords() {
     selRecordName = null;
+    guideMode = false;
     state.rankScroll = 0;
     recordsOpen = true;
     rankViz.paused = false; // 열 때마다 정지 해제
     rankInit();
     if (fdb) refreshCloudTop(); // 최신 글로벌 랭킹 갱신 시도
+  }
+  function openGuide() { // 안내 화면 — 랭킹 화면을 그대로 재사용(몹·벽돌·패들·애니 동일), 표 자리만 안내 본문
+    openRecords();
+    guideMode = true;
   }
   // 기록에서 고른 이니셜로 이어서 시작 — 그 이니셜의 12지신/난이도 누적을 이어받음
   function startAsInitial(name) {
@@ -3800,10 +3866,11 @@
         }
       }
 
-      // ---- 글로벌 랭킹 오버레이 (보스 패트롤 + 폭탄 소트 + 방어모드) ----
-      if (recordsOpen) {
-        drawRankViz();
-      }
+    }
+
+    // ---- 글로벌 랭킹/안내 오버레이 — 모드 무관 최상위 (보스 패트롤 + 폭탄 소트 + 방어모드) ----
+    if (recordsOpen) {
+      drawRankViz();
     }
 
     // 토스트 — 오버레이 위에 그려서 항상 보이게 (단, 글로벌 랭킹 화면에선 잭팟·콤보 등 큰 글자 숨김 — 읽기 방해 방지)
@@ -3987,6 +4054,7 @@
 
   function onAction() {
     ensureAudio();
+    if (recordsOpen) { rankViz.paused = !rankViz.paused; return; } // 랭킹/안내 열림 — ⏸ 토글만 (뒤 게임 조작 방지)
     if (state.mode === 'dying') { state.dyingT = 0; enterEntryMode(); return; } // 연출 건너뛰기
     if (state.mode === 'entry') return; // 이니셜 화면은 클릭으로 닫히지 않음 (Enter 저장 / ESC 닫기)
     if (state.mode === 'ready') launch();
@@ -4010,8 +4078,8 @@
     // 데모 중 — Space/Enter로 게임 시작
     if (state.attract) {
       if (e.code === 'KeyF') { toggleFullscreen(); return; } // 시작 화면에서도 전체 화면
-      if (recordsOpen) { // 기록 보기 중 — Esc/Space/Enter로 닫기
-        if (e.code === 'Escape' || e.code === 'Space' || e.code === 'Enter') recordsOpen = false;
+      if (recordsOpen) { // 기록/안내 보기 중 — Esc/Space/Enter로 닫기
+        if (e.code === 'Escape' || e.code === 'Space' || e.code === 'Enter') { recordsOpen = false; guideMode = false; }
         e.preventDefault();
         return;
       }
@@ -4163,25 +4231,30 @@
   canvas.addEventListener('mousedown', (e) => {
     lastInputTick = state.tick;
     ensureAudio();
+    if (recordsOpen) { // 랭킹/안내 오버레이 — 데모·플레이 어디서든 우선 처리
+      const apt = canvasPoint(e);
+      if (inBtn(recordsCloseRect(), apt.x, apt.y)) {
+        if (guideMode) { recordsOpen = false; guideMode = false; return; } // 안내 종료
+        if (selRecordName) startAsInitial(selRecordName);
+        return;
+      }
+      const _L = rankLayout();
+      if (Math.abs(apt.x - rankViz.bossX) < 24 && Math.abs(apt.y - _L.laneY) < 22) { // 몹 클릭 = 방어 20초 리셋 (피격 플래시)
+        rankViz.mode = 'defend'; rankViz.defendT = 1200; rankViz.shields = 2; rankViz.parts = 9; rankViz.flash = 14; rankViz.hurt = 8;
+        spawnParticles(rankViz.bossX, _L.laneY, '#ff3df0', 20, 2); if (sfx.boom) sfx.boom();
+        return;
+      }
+      const _cell = rankCellAt(apt.x, apt.y);
+      if (_cell >= 1) { rankEnterDefense(_cell); return; }   // 빈 칸 클릭 = 그 컬럼 방어모드
+      if (apt.x >= _L.x0 - 6 && apt.x <= _L.x0 + _L.tableW + 6 && apt.y >= _L.listTop && apt.y <= _L.listTop + _L.listH) {
+        const _row = guideMode ? null : rankRowAt(apt.x, apt.y); // 드래그=스크롤, 탭=행 선택(안내에선 선택 없음)
+        recDrag = { y: apt.y, startY: apt.y, name: _row ? (_row.name || '???') : null, moved: false };
+        return;
+      }
+      recordsOpen = false; guideMode = false; return; // 그 외 빈 곳 = 닫기
+    }
     if (state.attract) { // 데모 중 — 버튼/단계 박스 처리, 그 외 = 게임 시작
       const apt = canvasPoint(e);
-      if (recordsOpen) {
-        if (inBtn(recordsCloseRect(), apt.x, apt.y)) { if (selRecordName) startAsInitial(selRecordName); return; }
-        const _L = rankLayout();
-        if (Math.abs(apt.x - rankViz.bossX) < 24 && Math.abs(apt.y - _L.laneY) < 22) { // 몹 클릭 = 방어 20초 리셋 (피격 플래시)
-          rankViz.mode = 'defend'; rankViz.defendT = 1200; rankViz.shields = 2; rankViz.parts = 9; rankViz.flash = 14; rankViz.hurt = 8;
-          spawnParticles(rankViz.bossX, _L.laneY, '#ff3df0', 20, 2); if (sfx.boom) sfx.boom();
-          return;
-        }
-        const _cell = rankCellAt(apt.x, apt.y);
-        if (_cell >= 1) { rankEnterDefense(_cell); return; }   // 빈 칸 클릭 = 그 컬럼 방어모드
-        if (apt.x >= _L.x0 - 6 && apt.x <= _L.x0 + _L.tableW + 6 && apt.y >= _L.listTop && apt.y <= _L.listTop + _L.listH) {
-          const _row = rankRowAt(apt.x, apt.y); // 드래그=스크롤, 탭=행 선택
-          recDrag = { y: apt.y, startY: apt.y, name: _row ? (_row.name || '???') : null, moved: false };
-          return;
-        }
-        recordsOpen = false; return; // 그 외 빈 곳 = 닫기
-      }
       if (inBtn(recordsBtnRect(), apt.x, apt.y)) { openRecords(); return; }
       if (inBtn(startBtnRect(), apt.x, apt.y)) { requestLock(); startRealGame(); return; }
       const si = stageAtPoint(apt.x, apt.y);
@@ -4219,7 +4292,7 @@
   canvas.addEventListener('contextmenu', (e) => e.preventDefault()); // 우클릭 메뉴 차단
   // 게임오버 랭킹 — 마우스 휠 스크롤
   canvas.addEventListener('wheel', (e) => {
-    if (state.mode === 'over' || (state.attract && recordsOpen)) {
+    if (state.mode === 'over' || recordsOpen) { // 랭킹/안내 — 모드 무관 휠 스크롤
       e.preventDefault();
       state.rankScroll += e.deltaY * 0.6;
     } else if (state.mode === 'entry') {
@@ -4238,25 +4311,30 @@
     lastInputTick = state.tick;
     e.preventDefault();
     ensureAudio();
+    if (recordsOpen) { // 랭킹/안내 오버레이 — 모드 무관 우선 처리 (터치)
+      const apt = canvasPoint(e);
+      if (inBtn(recordsCloseRect(), apt.x, apt.y)) {
+        if (guideMode) { recordsOpen = false; guideMode = false; return; }
+        if (selRecordName) startAsInitial(selRecordName);
+        return;
+      }
+      const _L = rankLayout();
+      if (Math.abs(apt.x - rankViz.bossX) < 24 && Math.abs(apt.y - _L.laneY) < 22) {
+        rankViz.mode = 'defend'; rankViz.defendT = 1200; rankViz.shields = 2; rankViz.parts = 9; rankViz.flash = 14; rankViz.hurt = 8;
+        spawnParticles(rankViz.bossX, _L.laneY, '#ff3df0', 20, 2); if (sfx.boom) sfx.boom();
+        return;
+      }
+      const _cell = rankCellAt(apt.x, apt.y);
+      if (_cell >= 1) { rankEnterDefense(_cell); return; }
+      if (apt.x >= _L.x0 - 6 && apt.x <= _L.x0 + _L.tableW + 6 && apt.y >= _L.listTop && apt.y <= _L.listTop + _L.listH) {
+        const _row = guideMode ? null : rankRowAt(apt.x, apt.y);
+        recDrag = { y: apt.y, startY: apt.y, name: _row ? (_row.name || '???') : null, moved: false };
+        return;
+      }
+      recordsOpen = false; guideMode = false; return;
+    }
     if (state.attract) {
       const apt = canvasPoint(e);
-      if (recordsOpen) {
-        if (inBtn(recordsCloseRect(), apt.x, apt.y)) { if (selRecordName) startAsInitial(selRecordName); return; }
-        const _L = rankLayout();
-        if (Math.abs(apt.x - rankViz.bossX) < 24 && Math.abs(apt.y - _L.laneY) < 22) {
-          rankViz.mode = 'defend'; rankViz.defendT = 1200; rankViz.shields = 2; rankViz.parts = 9; rankViz.flash = 14; rankViz.hurt = 8;
-          spawnParticles(rankViz.bossX, _L.laneY, '#ff3df0', 20, 2); if (sfx.boom) sfx.boom();
-          return;
-        }
-        const _cell = rankCellAt(apt.x, apt.y);
-        if (_cell >= 1) { rankEnterDefense(_cell); return; }
-        if (apt.x >= _L.x0 - 6 && apt.x <= _L.x0 + _L.tableW + 6 && apt.y >= _L.listTop && apt.y <= _L.listTop + _L.listH) {
-          const _row = rankRowAt(apt.x, apt.y);
-          recDrag = { y: apt.y, startY: apt.y, name: _row ? (_row.name || '???') : null, moved: false };
-          return;
-        }
-        recordsOpen = false; return;
-      }
       if (inBtn(recordsBtnRect(), apt.x, apt.y)) { openRecords(); return; }
       if (inBtn(startBtnRect(), apt.x, apt.y)) { startRealGame(); return; }
       const si = stageAtPoint(apt.x, apt.y);
@@ -4293,7 +4371,11 @@
   const helpPanel = document.getElementById('helpPanel');
   helpBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    helpPanel.classList.toggle('open');
+    if (recordsOpen && guideMode) { recordsOpen = false; guideMode = false; } // 다시 누르면 닫기
+    else {
+      if (!state.attract && state.mode === 'play') state.mode = 'pause'; // 게임 중 — 일시정지 후 안내
+      openGuide(); // 캔버스 안내 화면 (구 HTML 모달 은퇴)
+    }
     helpBtn.blur(); // Space가 버튼을 다시 누르지 않게
   });
 
