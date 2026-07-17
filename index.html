@@ -143,24 +143,27 @@
     left: 50%;
     top: 50%;
     transform: translate(-50%, -50%);
-    width: min(680px, 94vw);
-    max-height: min(78vh, 660px);
+    width: min(1080px, 96vw);
+    max-height: 92vh;
     overflow-y: auto;
+    scrollbar-width: none;           /* 우측 스크롤바 숨김 (넘치면 바 없이 내부 스크롤) */
     background: rgba(10, 15, 30, 0.97);
     border: 1px solid var(--cyan);
     border-radius: 14px;
     box-shadow: 0 0 44px rgba(34, 230, 255, 0.35), 0 12px 48px rgba(0, 0, 0, 0.6);
-    padding: 20px 26px 24px;
-    font-size: 14px;
+    padding: 18px 24px 20px;
+    font-size: 21px;                 /* 1.5배 확대 */
+    letter-spacing: -0.02em;         /* 자간 조밀 */
     color: var(--text);
-    line-height: 1.9;
+    line-height: 1.45;               /* 줄간 타이트 — 무스크롤 목표 */
     z-index: 50;
     text-align: left;
   }
-  .help-panel .htitle { text-align: center; font-size: 19px; font-weight: 700; color: var(--cyan);
+  .help-panel::-webkit-scrollbar { display: none; } /* 크롬·엣지 스크롤바 숨김 */
+  .help-panel .htitle { text-align: center; font-size: 26px; font-weight: 700; color: var(--cyan);
     text-shadow: 0 0 12px rgba(34, 230, 255, 0.5); margin-bottom: 2px; }
-  .help-panel .hsub { text-align: center; font-size: 11px; color: var(--dim); margin-bottom: 8px; }
-  .help-panel h3 { margin: 14px 0 4px; font-size: 13px; color: var(--cyan); letter-spacing: 0.06em; }
+  .help-panel .hsub { text-align: center; font-size: 14px; color: var(--dim); margin-bottom: 6px; }
+  .help-panel h3 { margin: 12px 0 3px; font-size: 19px; color: var(--cyan); letter-spacing: 0.04em; }
   .help-panel.open { display: block; }
   .help-panel kbd {
     border: 1px solid var(--line);
