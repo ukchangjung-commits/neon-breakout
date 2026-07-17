@@ -256,11 +256,16 @@
   }
   .hud .score.pop { animation: scorePop 0.3s ease-out; }
   .hud .best  { color: var(--magenta); }
-  /* 이어하기(이니셜 선택 후 시작) — BEST·LV 줄을 살짝 올리고 아래에 이니셜+점수 줄 */
-  .hud .player-row { position: absolute; left: 14px; bottom: 6px; display: none; gap: 6px; align-items: center;
-    color: #2effc8; text-shadow: 0 0 10px rgba(46, 255, 200, 0.5); font-size: 0.9em; font-variant-numeric: tabular-nums; }
-  .hud.with-player .player-row { display: flex; }
-  .hud.with-player .hud-side:first-child { transform: translateY(-8px); }
+  /* 로그인 HUD — 두 줄(BEST+LogOut / 이니셜+누적 실시간+LV). 로그아웃 시 이니셜·누적·버튼 숨김, LV는 앞줄 맞춤 유지 */
+  .hud-lines { display: flex; flex-direction: column; gap: 2px; justify-content: center; }
+  .hud-lines .hud-line { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .hud-line2 .pname, .hud-line2 .pscore { color: #2effc8; text-shadow: 0 0 10px rgba(46, 255, 200, 0.5); font-variant-numeric: tabular-nums; }
+  .hud:not(.logged-in) .hud-line2 .pname, .hud:not(.logged-in) .hud-line2 .pscore { display: none; }
+  #logoutBtn { margin-left: 12px; padding: 0.6em 1.1em; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--panel); color: #ff9a3d; font: bold 12px ui-monospace, Menlo, Consolas, 'Courier New', monospace;
+    cursor: pointer; align-self: center; flex: none; text-shadow: 0 0 8px rgba(255, 154, 61, 0.5); }
+  #logoutBtn:hover { border-color: #ff9a3d; box-shadow: 0 0 10px rgba(255, 154, 61, 0.4); }
+  .hud:not(.logged-in) #logoutBtn { display: none; }
   .hud .lives {
     color: #ff5577;
     text-shadow: 0 0 10px rgba(255, 85, 119, 0.6), 0 0 22px rgba(255, 85, 119, 0.3);
@@ -354,10 +359,12 @@
   </div>
   <div class="hud">
     <div class="hud-side">
-      <span><span class="label" id="bestLabel">BEST</span><span class="best" id="best">0</span></span>
-      <span><span class="label">LV</span><span id="level">1</span></span>
+      <div class="hud-lines">
+        <div class="hud-line"><span class="label" id="bestLabel">BEST</span><span class="best" id="best">0</span></div>
+        <div class="hud-line hud-line2"><span id="playerName" class="pname">---</span><span id="playerScore" class="pscore">0</span><span class="label">LV</span><span id="level">1</span></div>
+      </div>
+      <button id="logoutBtn" title="로그아웃 — 이니셜 세션 해제">Log Out</button>
     </div>
-    <div class="player-row"><span id="playerName">---</span><span id="playerScore">0</span></div>
     <div class="score-wrap">
       <span class="label">SCORE</span><span class="score" id="score">0</span>
       <span class="lives" id="lives">♥&#xFE0E;♥&#xFE0E;♥&#xFE0E;</span>
@@ -482,11 +489,32 @@
   const BEST_KEY = 'neon-breakout-best';
   let best = Number(safeStore.get(BEST_KEY, 0)) || 0;
   bestEl.textContent = best;
-  // 이어하기(이니셜 선택 후 시작) 시 — BEST·LV 줄을 살짝 올리고 아래에 이니셜+그 이니셜 점수 줄 표시
+  // 로그인 HUD — 기록보기에서 이니셜 선택 = 로그인, Log Out 전까지 유지(새로고침 포함)
   const hudEl = document.querySelector('.hud');
   const playerNameEl = document.getElementById('playerName');
   const playerScoreEl = document.getElementById('playerScore');
-  let hudBestName = null, playerBest = 0;
+  const logoutBtn = document.getElementById('logoutBtn');
+  const LOGIN_KEY = 'neon-breakout-login';
+  let loginName = safeStore.get(LOGIN_KEY, null) || null;
+  let playerCum = 0;        // 로그인 이니셜의 저장된 누적점수
+  let scoreSaved = false;   // 이번 판 점수가 누적에 저장됐는지 (실시간 합계 이중 계산 방지)
+  function recCumOf(name) {
+    const list = (cloudAll && cloudAll.length) ? cloudAll : loadRecords();
+    const r = list.find(x => (x.name || '???') === name);
+    return r ? (r.cum != null ? r.cum : (r.score || 0)) : 0;
+  }
+  function applyLogin(name) {
+    loginName = name || null;
+    if (loginName) { safeStore.set(LOGIN_KEY, loginName); playerCum = recCumOf(loginName); }
+    else safeStore.remove(LOGIN_KEY);
+    hudEl.classList.toggle('logged-in', !!loginName);
+    if (loginName) playerNameEl.textContent = loginName;
+  }
+  logoutBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    applyLogin(null); // 로그아웃 — BEST와 LV만 남음
+    logoutBtn.blur();
+  });
 
   // 보스 격파 트로피 — 12지신 × 4회전(48) × 저항 색띠 10색 = 480마리
   // 이니셜별로 저장 — 같은 이니셜을 입력하면 12지신 진행 상태를 이어서 함
@@ -1264,10 +1292,8 @@
     const list = (cloudAll && cloudAll.length) ? cloudAll : loadRecords();
     const rec = list.find(r => (r.name || '???') === currentPlayer);
     startRealGame(rec && rec.level ? rec.level : 1);
-    hudBestName = currentPlayer; playerBest = rec ? (rec.score || 0) : 0; // HUD — 이니셜+점수 줄 표시
-    playerNameEl.textContent = currentPlayer;
-    playerScoreEl.textContent = playerBest;
-    hudEl.classList.add('with-player');
+    applyLogin(currentPlayer); // 로그인 — Log Out 전까지 유지
+    updateHud();
   }
   function diffStage() {
     if (manualStage !== null) return manualStage;
@@ -1978,7 +2004,10 @@
     // 하트 수에 비례한 패들 두께 (5개=14px … 1개=6px)
     state.paddle.h = Math.min(16, 4 + state.lives * 2);
     bestEl.textContent = best;
-    if (hudBestName) playerScoreEl.textContent = Math.max(playerBest, state.score); // 이니셜 줄 — 이번 판이 넘어서면 실시간 갱신
+    if (loginName) { // 누적점수 실시간 합계 — 저장된 누적 + 이번 판 점수 (콤마 표시, 데모 점수 제외)
+      const live = playerCum + ((!state.attract && !scoreSaved) ? state.score : 0);
+      playerScoreEl.textContent = fmtNum(live);
+    }
     levelEl.textContent = isBossLevel(state.level) ? state.level + ' BOSS' : state.level;
     // 빈 하트(죽은 횟수)는 왼쪽부터, 보너스 하트는 오른쪽으로 계속 쌓임
     // 한 줄(8개)이 넘으면 두 줄로 감싸고, 두 줄(16개)도 넘치면 그때만 축소
@@ -2095,6 +2124,10 @@
       ex.when = rec.when; ex.ts = now;                                          // 최근 플레이
       rec.cum = ex.cum; rec.score = ex.score; rec.level = ex.level;             // 클라우드 동기화용
     } else recs.push(rec);
+    if (loginName && name === loginName) { // 로그인 누적 갱신 — 실시간 합계 이중 계산 방지
+      playerCum = ex ? ex.cum : rec.cum;
+      scoreSaved = true;
+    }
     recs.sort((a, b) => (b.score || 0) - (a.score || 0));
     safeStore.set(REC_KEY, JSON.stringify(recs.slice(0, 100)));
     localTopCache = recs.slice(0, 3); // 데모 화면 TOP 3 갱신
@@ -2115,6 +2148,7 @@
     appId: '1:532059137459:web:6f0b91779cfc1ca9d917c6',
   };
   let fdb = null, fsm = null, cloudTop = null, cloudAll = null;
+  applyLogin(loginName); // 저장된 로그인 복원 — 새로고침에도 유지 (cloudAll 선언 이후 시점)
   async function initCloud() {
     if (!FIREBASE_CONFIG) return;
     try {
@@ -4055,7 +4089,7 @@
   function startRealGame(resumeLevel) {
     state.attract = false;
     simMenu = false;
-    hudBestName = null; playerBest = 0; hudEl.classList.remove('with-player'); // 일반 시작 — 이니셜 줄 숨김 (이어하기는 호출 뒤 다시 켬)
+    scoreSaved = false; // 새 판 — 이번 판 점수를 누적 실시간 합계에 반영 시작 (로그인 상태는 유지)
     state.score = 0; state.lives = 5; state.deaths = 0; state.level = resumeLevel || 1;
     state.energy = state.energyMax;
     state.ammo = { rapid: 0, bomb: 0 };
@@ -4075,7 +4109,7 @@
     if (state.mode === 'entry') confirmEntry(); // 입력 중이던 기록은 저장하고 전환
     state.attract = true;
     simMenu = false;
-    hudBestName = null; playerBest = 0; hudEl.classList.remove('with-player'); // 데모 복귀 — 이니셜 줄 숨김
+    // 로그인 상태는 데모 복귀에도 유지 — Log Out으로만 해제
     attractPhaseStart = state.tick;
     attractPhase = 'novice';
     demoFade = 0; demoFadeDir = 0; // 레벨 전환 페이드 초기화
