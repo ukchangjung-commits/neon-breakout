@@ -1,0 +1,137 @@
+<title>네온 벽돌깨기 — 두두두 3종 비교</title>
+<meta name="google" content="notranslate">
+<style>
+  :root{
+    --bg:#070b16; --panel:#0d1426; --line:#1d2b4d;
+    --cyan:#22e6ff; --magenta:#ff3df0; --amber:#ffc233; --green:#43f59b;
+    --text:#cfe6ff; --dim:#5f7396;
+    --mono: ui-monospace, "Consolas", "Courier New", monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100dvh; background:radial-gradient(1100px 640px at 50% -12%, #101c3a 0%, var(--bg) 62%);
+    color:var(--text); font-family:var(--mono); display:flex; flex-direction:column; align-items:center;
+    gap:18px; padding:32px 18px 48px;
+  }
+  h1{ margin:0; font-size:clamp(20px,5vw,30px); letter-spacing:.06em; color:var(--cyan);
+      text-shadow:0 0 14px rgba(34,230,255,.55); text-align:center; text-wrap:balance; }
+  .sub{ margin:0; color:var(--dim); font-size:13px; text-align:center; line-height:1.7; max-width:46ch; }
+  .hint{ color:var(--amber); }
+  .grid{ display:flex; flex-direction:column; gap:12px; width:100%; max-width:460px; }
+  button.sfx{
+    display:flex; align-items:center; gap:12px; width:100%; text-align:left; cursor:pointer;
+    background:var(--panel); color:var(--text); border:2px solid var(--line); border-radius:12px;
+    padding:14px 16px; font-family:var(--mono); font-size:15px; transition:border-color .12s, box-shadow .12s, transform .05s;
+  }
+  button.sfx:hover{ border-color:var(--cyan); box-shadow:0 0 14px rgba(34,230,255,.28); }
+  button.sfx:active{ transform:translateY(1px) scale(.995); }
+  button.sfx:focus-visible{ outline:3px solid var(--amber); outline-offset:2px; }
+  button.sfx .ico{ font-size:20px; width:26px; text-align:center; }
+  button.sfx .lab{ display:flex; flex-direction:column; gap:2px; }
+  button.sfx .lab b{ font-weight:700; }
+  button.sfx .lab small{ color:var(--dim); font-size:12px; }
+  .ref{ border-style:dashed; }
+  .ref .ico{ color:var(--dim); }
+  .a{ border-color:#5a2a2a; }
+  .a:hover{ border-color:var(--magenta); box-shadow:0 0 14px rgba(255,61,240,.3); }
+  .a .ico{ color:var(--magenta); }
+  .a .tag{ color:var(--magenta); }
+  .b{ border-color:#1f5a3a; }
+  .b:hover{ border-color:var(--green); box-shadow:0 0 14px rgba(67,245,155,.3); }
+  .b .ico{ color:var(--green); }
+  .b .tag{ color:var(--green); }
+  .c{ border-color:#5a3a12; }
+  .c:hover{ border-color:var(--amber); box-shadow:0 0 14px rgba(255,194,51,.3); }
+  .c .ico{ color:var(--amber); }
+  .c .tag{ color:var(--amber); }
+  .tag{ font-weight:700; }
+  .note{ color:var(--dim); font-size:12px; text-align:center; max-width:46ch; line-height:1.8; }
+  .warn{ color:var(--magenta); }
+  .rec{ color:var(--green); }
+</style>
+
+<h1>🎚️ 두두두 3종 비교</h1>
+<p class="sub">최대출력 두두두(bombShot 연발)를 <span class="hint">더 키우는 3가지 안</span>을 직접 들어보고 고르세요.<br>먼저 <b>현재(×3)</b>를 누르고, A·B·C와 비교해 보세요. (소리 켜두세요)</p>
+
+<div class="grid">
+  <button class="sfx ref" onclick="rapid(()=>bombShot(3),14)">
+    <span class="ico">🎯</span><span class="lab"><b>현재 (×3) — 기준</b><small>지금 게임에 적용된 소리 · tone 0.27 / noise 0.15</small></span>
+  </button>
+
+  <button class="sfx a" onclick="rapid(()=>bombShot(6),14)">
+    <span class="ico">💥</span><span class="lab"><b><span class="tag">A</span> · ×6 그대로</b><small class="warn">tone 0.54 / noise 0.30 · ⚠️ 연발 겹침 시 찢어질(클리핑) 수 있음</small></span>
+  </button>
+
+  <button class="sfx b" onclick="rapid(()=>bombShot(4.5),14)">
+    <span class="ico">🔊</span><span class="lab"><b><span class="tag">B</span> · ×4.5 (추천)</b><small class="rec">tone 0.405 / noise 0.225 · 확실히 크면서 왜곡 적음</small></span>
+  </button>
+
+  <button class="sfx c" onclick="rapid(()=>bombShot(6, LIMITER),14)">
+    <span class="ico">🎛️</span><span class="lab"><b><span class="tag">C</span> · ×6 + 리미터</b><small>compressor 통과 · 왜곡 없이 "꽉 차고 크게"</small></span>
+  </button>
+</div>
+
+<p class="note">
+  연발 = 고속연사 간격(약 85ms)으로 14발 이어 쏨.<br>
+  A/B/C 중 마음에 드는 걸 알려주시면 <span class="hint">게임 + 테스트 페이지에 반영</span>합니다.<br>
+  <span class="warn">A</span>: 시킨 그대로(×6) · <span class="rec">B</span>: 안전한 절충 · <span style="color:var(--amber)">C</span>: 크지만 안 찢어짐
+</p>
+
+<script>
+  let audio = null, masterGain = null, noiseBuf = null, LIMITER = null;
+  function ensureAudio(){
+    if(audio === null){
+      try{
+        audio = new (window.AudioContext || window.webkitAudioContext)();
+        masterGain = audio.createGain();
+        masterGain.gain.value = 1;
+        masterGain.connect(audio.destination);
+        // C안: 리미터(컴프레서) + 메이크업 게인 경로
+        const comp = audio.createDynamicsCompressor();
+        const t0 = audio.currentTime;
+        comp.threshold.setValueAtTime(-20, t0);
+        comp.knee.setValueAtTime(18, t0);
+        comp.ratio.setValueAtTime(8, t0);
+        comp.attack.setValueAtTime(0.003, t0);
+        comp.release.setValueAtTime(0.15, t0);
+        const makeup = audio.createGain();
+        makeup.gain.value = 1.5;
+        comp.connect(makeup).connect(audio.destination);
+        LIMITER = comp;
+      }catch(e){ audio = false; }
+    }
+    if(audio && audio.state !== 'running'){ const p = audio.resume && audio.resume(); if(p && p.catch) p.catch(()=>{}); }
+  }
+  function tone(freq, t, dur, type, vol, slide, out){
+    if(!audio || !freq) return;
+    t = Math.max(t, audio.currentTime);
+    const v = vol > 0 ? vol : 0.05;
+    const osc = audio.createOscillator();
+    const gain = audio.createGain();
+    osc.type = type || 'square';
+    osc.frequency.setValueAtTime(freq, t);
+    if(slide) osc.frequency.exponentialRampToValueAtTime(Math.max(40, freq + slide), t + dur);
+    gain.gain.setValueAtTime(v, t);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(gain).connect(out || masterGain);
+    osc.start(t); osc.stop(t + dur);
+  }
+  function noise(t, dur, vol, freq, out){
+    if(!audio) return;
+    if(!noiseBuf){
+      noiseBuf = audio.createBuffer(1, Math.floor(audio.sampleRate * 0.5), audio.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for(let i=0;i<d.length;i++) d[i] = Math.random()*2 - 1;
+    }
+    const src = audio.createBufferSource(); src.buffer = noiseBuf;
+    const flt = audio.createBiquadFilter(); flt.type='bandpass'; flt.frequency.value = freq || 2000; flt.Q.value = 0.8;
+    const g = audio.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(flt).connect(g).connect(out || masterGain);
+    src.start(t); src.stop(t + dur);
+  }
+  // 게임과 동일한 두두두(폭탄레이저 발사음). out을 주면 그 경로(리미터)로 흘림.
+  function bombShot(g, out){ g = g || 1; const t = audio.currentTime; tone(190, t, 0.18, 'sine', 0.09*g, -110, out); noise(t, 0.08, 0.05*g, 700, out); }
+  function rapid(fn, n){ ensureAudio(); let i = 0; (function tick(){ if(i++ >= n) return; fn(); setTimeout(tick, 85); })(); }
+</script>
