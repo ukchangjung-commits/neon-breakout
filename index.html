@@ -959,50 +959,75 @@
       x += cw;
     }
   }
-  // 안내 본문 — 세그먼트 배열 = 한 줄({t,c}), h=1이면 섹션 제목(절급 위계 — 본문 줄간의 1.6배 여백)
+  // 안내 본문 — 배열 = 한 줄({t,c} 세그먼트 / {icon:'Q'}=실제 아이템 아이콘), {c3:[...]}=3단 열 맞춤, h=1 섹션 제목
   const GUIDE_LINES = [
     [{ t: '🎮 조작', c: '#22e6ff', h: 1 }],
-    [{ t: '마우스 또는 ←→ 이동 · Space 공 발사/일시정지 · X 또는 클릭(꾹) 레이저', c: '#cfe6ff' }],
-    [{ t: 'N 새 게임 · F/⛶ 전체 화면 · 화면 클릭 = 마우스 고정(ESC 해제) · 🔊 소리는 첫 클릭 후', c: '#cfe6ff' }],
+    { c3: [[{ t: '마우스/키보드←→:이동', c: '#cfe6ff' }], [{ t: 'Space:시작/일시정지', c: '#cfe6ff' }], [{ t: 'N:새 게임', c: '#cfe6ff' }]] },
+    { c3: [[{ t: 'F/⛶:전체 화면', c: '#cfe6ff' }], [{ t: '화면 클릭:마우스 고정(ESC 해제)', c: '#cfe6ff' }], [{ t: '🔊:소리 끄기', c: '#cfe6ff' }]] },
+    [{ t: 'X/마우스 왼쪽 클릭:총알발사', c: '#cfe6ff' }],
+    [{ t: 'Q/마우스 휠클릭:탄창 25연발(현재무장 상태에서 고속으로 25발 발사)', c: '#cfe6ff' }],
+    [{ t: 'W/마우스 우클릭 = 폭탄 5연발(에너지 무소모)', c: '#cfe6ff' }],
     [{ t: '🎁 아이템 & 세트', c: '#22e6ff', h: 1 }],
-    [{ t: 'Q 4줄레이저', c: '#ffc233' }, { t: '  ·  ', c: '#5f7396' }, { t: 'R 고속연사', c: '#22e6ff' }, { t: '  ·  ', c: '#5f7396' }, { t: 'B 폭탄레이저', c: '#ff3df0' }, { t: '  ·  ', c: '#5f7396' }, { t: 'W 패들확장(손상 수리)', c: '#2effc8' }],
-    [{ t: 'E 에너지충전', c: '#c95cff' }, { t: '  ·  ', c: '#5f7396' }, { t: 'M 멀티볼', c: '#7f7bff' }, { t: '  ·  ', c: '#5f7396' }, { t: 'S 패들 축소 — 함정!', c: '#ff9a3d' }],
-    [{ t: 'R·B는 우상단 세트 적립(각 5) — Q/휠클릭 = 탄창 25연발(현재 무장 그대로!)', c: '#cfe6ff' }],
-    [{ t: 'W/우클릭 = 폭탄 5연발(에너지 무소모) · 폭탄+고속연사+에너지 30%↑ = 최대출력 두두두!', c: '#cfe6ff' }],
+    [{ icon: 'Q' }, { t: ' 4줄레이저', c: '#ffc233' }, { t: '   ', c: '#5f7396' }, { icon: 'R' }, { t: ' 고속연사', c: '#22e6ff' }, { t: '   ', c: '#5f7396' }, { icon: 'B' }, { t: ' 폭탄레이저', c: '#ff3df0' }, { t: '   ', c: '#5f7396' }, { icon: 'W' }, { t: ' 패들확장(손상 수리)', c: '#2effc8' }],
+    [{ icon: 'E' }, { t: ' 에너지충전', c: '#c95cff' }, { t: '   ', c: '#5f7396' }, { icon: 'M' }, { t: ' 멀티볼', c: '#7f7bff' }, { t: '   ', c: '#5f7396' }, { icon: 'S' }, { t: ' 패들 축소', c: '#ff9a3d' }],
+    [{ icon: 'R' }, { t: '·', c: '#5f7396' }, { icon: 'B' }, { t: ' 는 우상단 세트 적립(각5)  ·  폭탄+고속연사+에너지 30%↑ : 최대 출력 사운드', c: '#cfe6ff' }],
     [{ t: '💣 낙하물 & 하트', c: '#22e6ff', h: 1 }],
     [{ t: '콤보 2+ 벽돌 파괴 시 낙하 — 약 1/3 아이템(받기) · 2/3 폭탄(피하거나 격추 +15점)', c: '#cfe6ff' }],
-    [{ t: '폭탄 피격: 1회 패들 1/2 → 2회 1/4+경고 → 3회 목숨 −1 (새 목숨 = 복구)', c: '#cfe6ff' }],
-    [{ t: 'CI 번쩍 → ♥분홍 = 목숨+1(30,000점마다) · ♥파랑 = 보호막 7초(폭탄 파괴·공 난반사)', c: '#cfe6ff' }],
+    [{ t: '폭탄 피격: 1회 패들 1/2 → 2회 1/4+경고 → 3회 하트 −1 (새 하트 = 복구)', c: '#cfe6ff' }],
+    [{ t: '배경 CI 번쩍:', c: '#cfe6ff' }, { t: '♥분홍 = 목숨+1(30,000점마다)', c: '#ff5577' }, { t: ' · ', c: '#5f7396' }, { t: '♥파랑 = 보호막 7초(폭탄 파괴·공 난반사)', c: '#3fa9ff' }],
     [{ t: '🧱 벽돌 & 강화 블럭', c: '#22e6ff', h: 1 }],
-    [{ t: '패턴 12종 순환 · 색동 단계마다 강철 블럭 +1(최대 9) — 10발 격파(9칸 게이지), 폭발 −4', c: '#cfe6ff' }],
+    [{ t: '패턴12종 순환 · 색동 단계마다 강화 블럭 +1(최대9)', c: '#cfe6ff' }],
     [{ t: '👾 보스전 (4레벨마다)', c: '#22e6ff', h: 1 }],
-    [{ t: '실드 벽돌을 다 깰 때까지 무적(청록 돔) · 눈=몸 색이면 반사 모드(공격 무효+폭탄 반격)', c: '#cfe6ff' }],
-    [{ t: '실드 벽돌이 남아있을수록 반사 확률↑ · 잡을수록 모습 변화(480종)', c: '#cfe6ff' }],
+    [{ t: '실드 벽돌이 남아있을수록 반사 확률↑ 눈=몸 색이면 반사 모드(공격 무효+폭탄 반격)', c: '#cfe6ff' }],
     [{ t: '🏆 12지신 & 완주', c: '#22e6ff', h: 1 }],
-    [{ t: '보스 1마리 = 지신 1개 90° 회전 → 12마리 = 색동띠 1단계 → 120마리 완주 = 폭죽+랭킹!', c: '#ffd700' }],
-    [{ t: '랭킹에서 이니셜 선택 후 시작 = 레벨 이어하기 + TOTAL 누적 · 이모지 이니셜 가능', c: '#cfe6ff' }],
+    [{ t: '보스 1마리 = 지신 1개 90° 회전 → 12마리 = 색동띠 1단계 → 120마리 완주 후 폭죽+랭킹!', c: '#ffd700' }],
+    [{ t: '랭킹에서 이니셜 선택 후 시작 = 레벨 이어하기 + TOTAL 누적', c: '#cfe6ff' }],
   ];
   const GUIDE_FS = 16, GUIDE_LH = Math.round(GUIDE_FS * 1.8), GUIDE_HGAP = Math.round(GUIDE_FS * 0.8 * 1.6); // {타이포기본}
+  const GUIDE_ICON_COLORS = { Q: '#ffc233', R: '#22e6ff', B: '#ff3df0', W: '#2effc8', E: '#c95cff', M: '#7f7bff', S: '#ff9a3d' };
   function guideContentH() {
     let h = 26;
-    for (const ln of GUIDE_LINES) { if (ln[0].h) h += GUIDE_HGAP; h += GUIDE_LH; }
+    for (const ln of GUIDE_LINES) { if (Array.isArray(ln) && ln[0].h) h += GUIDE_HGAP; h += GUIDE_LH; }
     return h + 8;
+  }
+  // 세그먼트 렌더 — {icon}=실제 아이템 아이콘(원판+색 글자), {t,c}=텍스트. x 진행값 반환
+  function drawGuideSegs(segs, x, y, head) {
+    for (const seg of segs) {
+      if (seg.icon) {
+        const c = GUIDE_ICON_COLORS[seg.icon] || '#cfe6ff';
+        ctx.fillStyle = '#0d1426'; ctx.strokeStyle = c; ctx.lineWidth = 1.5;
+        ctx.shadowColor = c; ctx.shadowBlur = 6;
+        ctx.beginPath(); ctx.arc(x + 9, y - 5, 8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = c; ctx.font = 'bold 9px Menlo, Consolas, monospace';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(seg.icon, x + 9, y - 5);
+        ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+        x += 20;
+      } else {
+        ctx.font = (head ? 'bold ' + (GUIDE_FS + 1) : GUIDE_FS) + 'px Menlo, Consolas, monospace';
+        ctx.fillStyle = seg.c;
+        ctx.fillText(seg.t, x, y);
+        x += ctx.measureText(seg.t).width;
+      }
+    }
+    return x;
   }
   function drawGuideBody(L) {
     ctx.save();
     ctx.beginPath(); ctx.rect(L.x0 - 6, L.listTop, L.tableW + 12, L.listH); ctx.clip();
     try { ctx.letterSpacing = '-1.6px'; } catch (e) {} // 자간 −0.1em (16px 기준)
     ctx.textAlign = 'left';
+    const CX = [L.x0 + 8, L.x0 + L.tableW * 0.36, L.x0 + L.tableW * 0.75]; // 3단 열 위치 (아래 줄도 동일 열 맞춤)
     let y = L.listTop + 26 - state.rankScroll;
     for (const ln of GUIDE_LINES) {
-      if (ln[0].h) y += GUIDE_HGAP;
-      if (y > L.listTop - 10 && y < L.listTop + L.listH + GUIDE_LH) {
-        let x = L.x0 + 8;
-        for (const seg of ln) {
-          ctx.font = (ln[0].h ? 'bold ' + (GUIDE_FS + 1) : GUIDE_FS) + 'px Menlo, Consolas, monospace';
-          ctx.fillStyle = seg.c;
-          ctx.fillText(seg.t, x, y);
-          x += ctx.measureText(seg.t).width;
+      const head = Array.isArray(ln) && ln[0].h;
+      if (head) y += GUIDE_HGAP;
+      if (y > L.listTop - 12 && y < L.listTop + L.listH + GUIDE_LH) {
+        if (ln.c3) {
+          for (let k = 0; k < 3; k++) if (ln.c3[k]) drawGuideSegs(ln.c3[k], CX[k], y, false);
+        } else {
+          drawGuideSegs(ln, CX[0], y, head);
         }
       }
       y += GUIDE_LH;
