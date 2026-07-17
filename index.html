@@ -139,21 +139,28 @@
   #helpBtn:hover, #muteBtn:hover, #fsBtn:hover { border-color: var(--cyan); box-shadow: 0 0 10px rgba(34, 230, 255, 0.35); }
   .help-panel {
     display: none;
-    position: absolute;
-    right: 0;
-    top: 120px;
-    width: min(460px, 100%);
-    background: rgba(13, 20, 38, 0.97);
+    position: fixed;                 /* 화면 정중앙 고정 모달 */
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: min(680px, 94vw);
+    max-height: min(78vh, 660px);
+    overflow-y: auto;
+    background: rgba(10, 15, 30, 0.97);
     border: 1px solid var(--cyan);
-    border-radius: 10px;
-    box-shadow: 0 0 24px rgba(34, 230, 255, 0.25);
-    padding: 16px 18px;
-    font-size: 12px;
-    color: var(--dim);
-    line-height: 1.8;
-    z-index: 10;
+    border-radius: 14px;
+    box-shadow: 0 0 44px rgba(34, 230, 255, 0.35), 0 12px 48px rgba(0, 0, 0, 0.6);
+    padding: 20px 26px 24px;
+    font-size: 14px;
+    color: var(--text);
+    line-height: 1.9;
+    z-index: 50;
     text-align: left;
   }
+  .help-panel .htitle { text-align: center; font-size: 19px; font-weight: 700; color: var(--cyan);
+    text-shadow: 0 0 12px rgba(34, 230, 255, 0.5); margin-bottom: 2px; }
+  .help-panel .hsub { text-align: center; font-size: 11px; color: var(--dim); margin-bottom: 8px; }
+  .help-panel h3 { margin: 14px 0 4px; font-size: 13px; color: var(--cyan); letter-spacing: 0.06em; }
   .help-panel.open { display: block; }
   .help-panel kbd {
     border: 1px solid var(--line);
@@ -366,28 +373,26 @@
   </div>
   <div class="screen"><canvas id="game" width="720" height="900"></canvas></div>
   <div id="helpPanel" class="help-panel">
-    마우스 또는 <kbd>←</kbd> <kbd>→</kbd> 이동 · <kbd>Space</kbd> 공 발사 / <b>일시정지</b> ·
-    <kbd>X</kbd> 또는 <b>클릭(꾹)</b> 레이저 · <kbd>N</kbd> <b>새 게임</b> · <kbd>F</kbd>/⛶ <b>전체 화면</b><br>
-    <span style="color:#22e6ff">R</span>·<span style="color:#ff3df0">B</span> 아이템을 먹으면 버프 + 우상단에 <b>세트 적립(각 최대 5)</b> —
-    발동: <b>탄창(연사 25발)</b> = <kbd>Q</kbd> 또는 <b>휠클릭</b> · <b>폭탄(5발)</b> = <kbd>W</kbd> 또는 <b>우클릭</b> (에너지 소모 없음)<br>
-    화면을 클릭하면 <b>마우스가 게임에 고정</b>됩니다 (커서가 밖으로 안 나감) · <kbd>ESC</kbd>로 해제<br>
-    🔊 배경음악·효과음은 첫 클릭 후 재생 시작 — 상단 🔊 버튼으로 켜고 끌 수 있어요<br>
-    <b>콤보 2 이상</b>으로 벽돌을 깨면 뭔가 떨어져요 — <b>1/3은 아이템</b>(받기), <b style="color:#ff5555">2/3은 폭탄</b>(피하기! 레이저로 격추 +15점)<br>
-    폭탄 피격: <b>1회 = 패들 1/2</b> → <b>2회 = 1/4 + <span style="color:#ff5555">빨간 경고</span></b> → <b style="color:#ff5555">3회 = 목숨 -1</b> (목숨을 잃으면 패들 복구)<br>
-    손상 상태에서 <span style="color:#2effc8">W</span>를 먹으면 확장 대신 <b>한 단계 수리</b> · 1/4 손상 + <span style="color:#ff9a3d">S</span> 축소가 겹치면 <b>총알이 1발</b>만 나감<br>
-    CI가 번쩍이면 하트 낙하 — <span style="color:#ff5577">♥ 분홍 = 목숨 +1 (30000점마다)</span> ·
-    <span style="color:#3fa9ff">♥ 파랑 = 보호막 7초 (1단계 10000점 → 10단계 30만점, 고난도일수록 희귀)</span>
-    — 보호막: 폭탄 파괴 · 공 난반사 · 아이템/총알 통과<br>
-    아이템: <span style="color:#ffc233">Q</span> 4줄레이저 ·
-    <span style="color:#22e6ff">R</span> 고속연사 ·
-    <span style="color:#ff3df0">B</span> 폭탄레이저 ·
-    <span style="color:#2effc8">W</span> 패들확장 ·
-    <span style="color:#c95cff">E</span> 에너지충전 ·
-    <span style="color:#7f7bff">M</span> 멀티볼 ·
-    <span style="color:#ff9a3d">S</span> <b>패들 축소(함정!)</b> ·
-    레벨마다 벽돌 패턴이 바뀌고 <b style="color:#ff5555">4레벨마다 보스전!</b><br>
-    보스는 잡을수록 모습이 변합니다(480종). 벽에 튕길 때마다 눈 색이 바뀌는데,
-    <b>눈이 몸 색과 같아지면(10%) 반사 모드</b> — 공격이 무효가 되고 <b style="color:#ff5555">데미지만큼 폭탄으로 반격</b>합니다. 눈 색이 풀릴 때를 노리세요!
+    <div class="htitle">🕹️ NEON BREAKOUT 안내</div>
+    <div class="hsub">? 버튼을 다시 누르면 닫힙니다</div>
+    <h3>🎮 조작</h3>
+    마우스 또는 <kbd>←</kbd><kbd>→</kbd> 이동 · <kbd>Space</kbd> 공 발사 / <b>일시정지</b> · <kbd>X</kbd> 또는 <b>클릭(꾹)</b> 레이저 · <kbd>N</kbd> 새 게임 · <kbd>F</kbd>/⛶ 전체 화면<br>
+    화면 클릭 = <b>마우스 게임 고정</b>(<kbd>ESC</kbd> 해제) · 🔊 소리는 첫 클릭 후 시작 — 상단 🔊 버튼으로 켜고 끔
+    <h3>🎁 아이템 & 세트</h3>
+    <span style="color:#ffc233">Q</span> 4줄레이저 · <span style="color:#22e6ff">R</span> 고속연사 · <span style="color:#ff3df0">B</span> 폭탄레이저 · <span style="color:#2effc8">W</span> 패들확장(손상 시 <b>한 단계 수리</b>) · <span style="color:#c95cff">E</span> 에너지충전 · <span style="color:#7f7bff">M</span> 멀티볼 · <span style="color:#ff9a3d">S</span> <b>패들 축소(함정!)</b><br>
+    <span style="color:#22e6ff">R</span>·<span style="color:#ff3df0">B</span>를 먹으면 우상단 <b>세트 적립(각 최대 5)</b> — <kbd>Q</kbd>/휠클릭 = <b>탄창 25연발(현재 무장 그대로 — 폭탄 장착 중이면 폭탄 연발!)</b> · <kbd>W</kbd>/우클릭 = <b>폭탄 5연발</b> (에너지 소모 없음)<br>
+    💡 폭탄레이저+고속연사+에너지 30%↑가 겹치면 <b>최대출력 두두두</b> 사운드!
+    <h3>💣 낙하물 & 하트</h3>
+    <b>콤보 2 이상</b>으로 벽돌을 깨면 낙하 — 약 <b>1/3 아이템</b>(받기) · <b style="color:#ff5555">2/3 폭탄</b>(피하거나 레이저 격추 +15점)<br>
+    폭탄 피격: <b>1회 = 패들 1/2</b> → <b>2회 = 1/4 + <span style="color:#ff5555">빨간 경고</span></b> → <b style="color:#ff5555">3회 = 목숨 −1</b> (새 목숨 = 패들 복구) · 1/4 손상 + <span style="color:#ff9a3d">S</span> 축소가 겹치면 총알 1발만<br>
+    CI가 번쩍이면 하트 낙하 — <span style="color:#ff5577">♥ 분홍 = 목숨 +1 (30,000점마다)</span> · <span style="color:#3fa9ff">♥ 파랑 = 보호막 7초</span>(단계 오를수록 희귀) — 보호막: 폭탄 파괴 · 공 난반사 · 아이템/총알 통과
+    <h3>🧱 벽돌 & 강화 블럭</h3>
+    레벨마다 벽돌 패턴 <b>12종</b> 순환 · 색동띠 단계가 오르면 <b>강철 블럭</b>(단계당 +1, 최대 9) 등장 — <b>10발</b>을 맞혀야 파괴(내부 9칸 게이지가 한 칸씩 감소), 폭탄 폭발은 −4
+    <h3>👾 보스전 (4레벨마다)</h3>
+    보스는 <b>실드 벽돌을 다 깰 때까지 무적</b>(청록 보호막 돔) · 벽에 튕길 때마다 눈 색 룰렛 — <b>눈이 몸 색과 같으면 반사 모드</b>: 공격 무효 + <b style="color:#ff5555">데미지만큼 폭탄 반격</b> (실드 벽돌이 남아있을수록 반사 확률↑) · 잡을수록 모습 변화(480종)
+    <h3>🏆 12지신 & 완주</h3>
+    보스 1마리 = 12지신 1개 <b>90° 회전</b> → <b>12마리 = 색동띠 1단계</b>(저항 10색) → <b style="color:#ffd700">120마리 완주 = 폭죽 축하 + 기록 저장 + 글로벌 랭킹!</b><br>
+    글로벌 랭킹에서 이니셜 선택 후 시작하면 <b>레벨 이어하기</b> + <b>TOTAL(누적 점수)</b> 합산 · 이니셜에는 💖🏆💣·12지신·아이템 문자도 쓸 수 있어요
   </div>
 </div>
 
