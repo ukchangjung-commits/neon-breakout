@@ -1134,7 +1134,7 @@
   }
   function diffStage() {
     if (manualStage !== null) return manualStage;
-    return Math.min(9, Math.floor(bossKills / 48));
+    return Math.min(9, Math.floor(bossKills / 12)); // 12킬 = 1단계 (전체 480→120판 재조정)
   }
   // 시작화면에서 난이도(단계) 선택 시 — 현재 데모 판을 새 난이도로 즉시 재구성 (바로 적용)
   function applyDemoStage() {
@@ -1196,14 +1196,13 @@
   const RESISTOR_COLORS = ['#1a1a1a', '#8b4513', '#ff2020', '#ff8c00', '#ffd700',
                            '#00c853', '#2979ff', '#9400d3', '#9e9e9e', '#ffffff'];
   function applyBossTrophies() {
-    const inCycle = bossKills % 48; // 현재 사이클 내 격파 수
+    const inCycle = bossKills % 12; // 1킬 = 지신 1개 90° 한 번만 — 12킬 = 색동띠 1단계 (총 120킬 완주)
     zodiacEls.forEach((el, i) => {
       if (i >= 12) return; // 동그라미 제외
-      const quarterTurns = Math.floor(inCycle / 12) + (i < inCycle % 12 ? 1 : 0);
-      el.style.setProperty('--rot', quarterTurns * 90 + 'deg');
+      el.style.setProperty('--rot', (i < inCycle ? 90 : 0) + 'deg');
     });
     const ring = zodiacEls[12];
-    const colorIdx = Math.floor(bossKills / 48) % 10;
+    const colorIdx = Math.floor(bossKills / 12) % 10;
     ring.style.color = RESISTOR_COLORS[colorIdx];
     ring.style.textShadow = colorIdx === 0
       ? '0 0 8px rgba(255,255,255,0.5)' // 흑색은 흰 테두리 광으로 식별
@@ -1211,6 +1210,32 @@
   }
 
   const ROW_COLORS = ['#ff3df0', '#c95cff', '#7f7bff', '#3fa9ff', '#22e6ff', '#2effc8'];
+
+  // 120킬(12지신 × 색동 10단계) 완주 — 폭죽 대연발(5초) → 기록 저장 → 글로벌 랭킹 화면으로
+  let completeT = 0;
+  function startCompleteShow() {
+    completeT = 300;
+    showToast('🎇 12지신 × 색동 10단계 완주! 축하합니다!', '#ffd700');
+    confettiBlast();
+    if (sfx.clear) sfx.clear();
+  }
+  function updateCompleteShow() {
+    if (completeT <= 0) return;
+    completeT--;
+    if (completeT % 10 === 0) { // 폭죽 연발
+      spawnParticles(40 + Math.random() * (W - 80), H * 0.15 + Math.random() * H * 0.55,
+        ROW_COLORS[Math.floor(Math.random() * ROW_COLORS.length)], 30, 2.4);
+      spawnParticles(40 + Math.random() * (W - 80), H * 0.15 + Math.random() * H * 0.55, '#ffd700', 14, 1.8);
+      if (sfx.pop) sfx.pop();
+      state.shake = Math.max(state.shake, 5);
+    }
+    if (completeT % 45 === 0) confettiBlast();
+    if (completeT === 0) { // 연출 종료 — 기록 저장 후 기록 보기 연결
+      saveRecord(currentPlayer);
+      enterAttract();
+      openRecords();
+    }
+  }
 
   // fainders.ai CI — 고정 별자리 (화면 위쪽 55%에만, 크기 다양·촘촘, 간혹 반짝)
   const CI_ZONE = 0.55; // 로고가 깔리는 세로 범위 (아래 45%는 비움)
@@ -1542,9 +1567,35 @@
         const inner = r >= 2 && r <= rows - 3 && c >= 3 && c <= cols - 4;
         return edge || inner;
       } },
+    { name: '지그재그',     include: (r, c) => (c + (r % 2) * 2) % 4 < 2 },
+    { name: '물결',         include: (r, c, rows, cols) =>
+        Math.abs(r - ((Math.sin(c * 0.7) + 1) / 2) * (rows - 3) - 1) <= 1.4 },
+    { name: 'X 크로스',     include: (r, c, rows, cols) => {
+        const t = c / (cols - 1) * (rows - 1);
+        return Math.abs(r - t) <= 1.1 || Math.abs(r - (rows - 1 - t)) <= 1.1;
+      } },
+    { name: '벽돌쌓기',     include: (r, c) => (c + (r % 2 ? 1 : 0)) % 3 !== 2 },
+    { name: '터널',         include: (r, c, rows, cols) =>
+        !(r >= rows * 0.35 && r <= rows * 0.75 && c >= cols * 0.28 && c <= cols * 0.72) },
+    { name: '모래시계',     include: (r, c, rows, cols) => {
+        const dr = Math.abs(r - (rows - 1) / 2) / ((rows - 1) / 2);
+        return Math.abs(c - (cols - 1) / 2) <= dr * (cols / 2 - 1) + 1.2;
+      } },
   ];
 
   function isBossLevel(level) { return level % 4 === 0; }
+
+  // 강화 블럭 — 색동 단계 N이면 N개(최대 9): HP 10, 총알·공 1발당 -1, 폭탄 폭발은 -4. 보스전 실드 줄에도 동일 적용.
+  function addToughBricks() {
+    const n = Math.min(9, diffStage());
+    let tries = 0;
+    for (let k = 0; k < n && tries < 200; tries++) {
+      const b = state.bricks[Math.floor(Math.random() * state.bricks.length)];
+      if (!b || b.tough) continue;
+      b.tough = true; b.hp = 10; b.color = '#8fa8cf';
+      k++;
+    }
+  }
 
   const state = {
     mode: 'ready',        // ready | play | pause | over | clear
@@ -1625,6 +1676,7 @@
           });
         }
       }
+      addToughBricks(); // 보스전 실드 줄에도 강화 블럭 (색동 단계당 +1)
       return;
     }
 
@@ -1643,6 +1695,7 @@
         });
       }
     }
+    addToughBricks(); // 강화 블럭 배치 (색동 단계당 +1, 최대 9)
   }
 
   function updatePaddleWidth() {
@@ -2237,7 +2290,8 @@
       state.runKills++;
       saveBossMap();
       applyBossTrophies();
-      showToast('🏆 ' + currentPlayer + ' 보스 ' + bossKills + '마리 — 12지신 각인!', '#ffd700');
+      if (bossKills > 0 && bossKills % 120 === 0) startCompleteShow(); // 12지신 × 색동 10단계 = 120킬 완주!
+      else showToast('🏆 ' + currentPlayer + ' 보스 ' + bossKills + '마리 — 12지신 각인!', '#ffd700');
       updateHud();
     }
   }
@@ -2253,7 +2307,14 @@
       const cx = br.x + br.w / 2, cy = br.y + br.h / 2;
       return Math.hypot(cx - x, cy - y) <= R;
     });
-    for (const br of victims) destroyBrick(br, true);
+    for (const br of victims) {
+      if (br.tough && br.hp > 4) { // 강화 블럭 — 폭발은 -4 (즉사 아님)
+        br.hp -= 4;
+        spawnParticles(br.x + br.w / 2, br.y + br.h / 2, '#8fe0ff', 10, 1.6);
+        continue;
+      }
+      destroyBrick(br, true);
+    }
     // 보스가 반경 내면 큰 피해
     const boss = state.boss;
     if (boss) {
@@ -2356,6 +2417,7 @@
 
   function step() {
     if (recordsOpen && !rankViz.paused) updateRankViz(); // 글로벌 랭킹 애니메이션 (⏸ 정지키로 일시정지 가능)
+    updateCompleteShow(); // 120킬 완주 폭죽 연출
     if (state.freeze > 0) { state.freeze--; return; } // 히트스톱
     if (state.attract && (simMenu || recordsOpen)) return; // 시뮬 메뉴/글로벌 랭킹 열림 → 데모 자동 포즈
     // 게임 종료 연출 (3초) — 산발 폭발 후 이니셜 입력으로
@@ -2999,6 +3061,23 @@
 
     // 벽돌
     for (const brick of state.bricks) {
+      if (brick.tough) { // 강화 블럭 — 강철 톤 + 9칸 세그먼트 게이지 (남은 칸 = HP−1)
+        ctx.fillStyle = '#1a2436';
+        ctx.strokeStyle = '#8fa8cf';
+        ctx.lineWidth = 1.5;
+        ctx.shadowColor = '#8fa8cf';
+        ctx.shadowBlur = 8;
+        ctx.fillRect(brick.x, brick.y, brick.w, brick.h);
+        ctx.strokeRect(brick.x + 0.75, brick.y + 0.75, brick.w - 1.5, brick.h - 1.5);
+        ctx.shadowBlur = 0;
+        const seg = Math.max(0, Math.min(9, brick.hp - 1));
+        const gap = 1.5, segW = (brick.w - 6 - gap * 8) / 9;
+        ctx.fillStyle = '#8fe0ff';
+        for (let s = 0; s < seg; s++) {
+          ctx.fillRect(brick.x + 3 + s * (segW + gap), brick.y + 4, segW, brick.h - 8);
+        }
+        continue;
+      }
       ctx.fillStyle = brick.color;
       ctx.globalAlpha = brick.hp > 1 ? 0.55 : 1;
       ctx.shadowColor = brick.color;
