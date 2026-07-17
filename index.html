@@ -511,7 +511,7 @@
   }
   function applyLogin(name) {
     loginName = name || null;
-    if (loginName) { safeStore.set(LOGIN_KEY, loginName); playerCum = recCumOf(loginName); }
+    if (loginName) { safeStore.set(LOGIN_KEY, loginName); playerCum = recCumOf(loginName); syncLoginFromCloud(); } // 목록값 즉시 + 서버 개별 조회로 보정
     else safeStore.remove(LOGIN_KEY);
     hudEl.classList.toggle('logged-in', !!loginName);
     if (loginName) playerNameEl.textContent = loginName;
@@ -1280,18 +1280,19 @@
     guideMode = true;
   }
   // 기록에서 고른 이니셜로 이어서 시작 — 그 이니셜의 12지신/난이도 누적을 이어받음
-  function startAsInitial(name) {
+  async function startAsInitial(name) {
     currentPlayer = name || '???';
     bossKills = bossMap[currentPlayer] || 0;
     safeStore.set(PLAYER_KEY, currentPlayer);
     applyBossTrophies();
     recordsOpen = false;
     requestLock();
-    // 기록 이어하기(B안) — 레벨은 그 이니셜 최고기록에서 이어서, 점수는 0부터(저장 시 max 유지)
+    // 기록 이어하기(B안) — 목록(상위 100)에 없으면 서버 개별 조회로 레벨 확보 (100위 밖 이어하기 정상화)
     const list = (cloudAll && cloudAll.length) ? cloudAll : loadRecords();
-    const rec = list.find(r => (r.name || '???') === currentPlayer);
+    let rec = list.find(r => (r.name || '???') === currentPlayer);
+    if (!rec) rec = await fetchPlayerDoc(currentPlayer);
     startRealGame(rec && rec.level ? rec.level : 1);
-    applyLogin(currentPlayer); // 로그인 — Log Out 전까지 유지
+    applyLogin(currentPlayer); // 로그인 — Log Out 전까지 유지 (내부에서 서버 개별 동기화)
     updateHud();
   }
   function diffStage() {
@@ -2159,7 +2160,7 @@
       const appMod = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js');
       fsm = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
       fdb = fsm.getFirestore(appMod.initializeApp(FIREBASE_CONFIG));
-      migratePlayers().then(wipeCloudRank).then(seedCloudRank).then(refreshCloudTop); // 구조 이전 → 초기화 → 시드 10명 → 랭킹 로드 (각 1회)
+      migratePlayers().then(wipeCloudRank).then(seedCloudRank).then(refreshCloudTop).then(syncLoginFromCloud); // 구조 이전 → 초기화 → 시드 → 랭킹 로드 → 로그인 개별 동기화
     } catch (e) { fdb = null; }
   }
   // 집계 구조 — 'players' 컬렉션: 이니셜당 문서 1개. cum=서버 원자 누적(increment, 다기기 합산 정확), score/level=max 병합.
@@ -2230,6 +2231,22 @@
       await fsm.setDoc(metaRef, { wipe1: true, legacyOff: true, wipedAt: Date.now() }, { merge: true });
       legacyOff = true;
     } catch (e) {}
+  }
+  // 로그인 이니셜 개별 조회 — 순위(상위 100) 무관하게 서버 문서 1개 직접 읽기 (문서 ID=이니셜)
+  async function fetchPlayerDoc(name) {
+    if (!fdb || !name) return null;
+    try {
+      const snap = await fsm.getDoc(fsm.doc(fdb, 'players', name));
+      return snap.exists() ? snap.data() : null;
+    } catch (e) { return null; }
+  }
+  async function syncLoginFromCloud() { // 로그인 누적을 서버 값으로 동기화 (실패 시 목록 기반 폴백 유지)
+    if (!loginName) return;
+    const d = await fetchPlayerDoc(loginName);
+    if (d) {
+      playerCum = d.cum != null ? d.cum : (d.score || 0);
+      updateHud();
+    }
   }
   // 시드 데이터 — 서버 플래그(_meta.seed1)로 전 세계 1회: 샘플 사용자 10명 (BEST 1,000~40,000)
   async function seedCloudRank() {
