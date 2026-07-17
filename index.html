@@ -3736,31 +3736,37 @@
       for (let i = 0; i < LEGEND.length; i++) {
         const col = i % 2, row = Math.floor(i / 2);
         const lx = W / 2 - 250 + col * 270, ly = legendY + row * 30;
+        const cy = ly - 5;             // 원·내부 글자·뒤 설명 공통 세로 중심 (중앙 정렬)
         const it = LEGEND[i];
         if (it.bomb) {
-          drawBombShape(lx + 10, ly - 4, 40); // 실제 폭탄 모양 (고정 위상)
-        } else { // 실제 드롭과 동일 — 어두운 원판 + 색 테두리 + 글로우 + 색 글자
+          ctx.save();                  // 실제 폭탄 모양 — 3/4 크기(1/4 축소)
+          ctx.translate(lx + 10, cy);
+          ctx.scale(0.75, 0.75);
+          drawBombShape(0, 0, 40);
+          ctx.restore();
+        } else { // 실제 드롭과 동일 — 어두운 원판 + 색 테두리 + 글로우 + 색 글자 (3/4 크기)
           ctx.fillStyle = '#0d1426';
           ctx.strokeStyle = it.c;
-          ctx.lineWidth = 2;
+          ctx.lineWidth = 1.6;
           ctx.shadowColor = it.c;
-          ctx.shadowBlur = 10;
+          ctx.shadowBlur = 8;
           ctx.beginPath();
-          ctx.arc(lx + 10, ly - 5, 10, 0, Math.PI * 2);
+          ctx.arc(lx + 10, cy, 7.5, 0, Math.PI * 2);
           ctx.fill();
           ctx.stroke();
           ctx.shadowBlur = 0;
           ctx.fillStyle = it.c;
-          ctx.font = 'bold 11px Menlo, Consolas, monospace';
+          ctx.font = 'bold 8px Menlo, Consolas, monospace';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.fillText(it.l, lx + 10, ly - 4);
-          ctx.textBaseline = 'alphabetic';
+          ctx.fillText(it.l, lx + 10, cy);
         }
-        ctx.textAlign = 'left';
+        ctx.textAlign = 'left';        // 뒤 설명 — 같은 세로 중심, 아이콘과 아이템 하나(≈15px) 간격
+        ctx.textBaseline = 'middle';
         ctx.fillStyle = it.c;
         ctx.font = 'bold 15px Menlo, Consolas, monospace';
-        ctx.fillText(it.t, lx + 26, ly);
+        ctx.fillText(it.t, lx + 33, cy);
+        ctx.textBaseline = 'alphabetic';
       }
       ctx.textAlign = 'center';
 
