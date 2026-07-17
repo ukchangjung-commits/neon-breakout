@@ -261,10 +261,11 @@
   .hud-lines .hud-line { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
   .hud-line2 .pname, .hud-line2 .pscore { color: #2effc8; text-shadow: 0 0 10px rgba(46, 255, 200, 0.5); font-variant-numeric: tabular-nums; }
   .hud:not(.logged-in) .hud-line2 .pname, .hud:not(.logged-in) .hud-line2 .pscore { display: none; }
-  #logoutBtn { margin-left: 10px; padding: 0.3em 1em; border: 1px solid var(--line); border-radius: 8px;
+  #logoutBtn { margin-left: 10px; padding: 0.45em 1.2em; border: 1px solid var(--line); border-radius: 8px;
     background: var(--panel); color: #ff9a3d; font: bold 12px ui-monospace, Menlo, Consolas, 'Courier New', monospace;
-    cursor: pointer; align-self: stretch; display: flex; align-items: center; flex: none;
-    text-shadow: 0 0 8px rgba(255, 154, 61, 0.5); } /* BEST 뒤 배치 — 줄 높이 꽉 채워 클릭 범위 넓게 */
+    cursor: pointer; align-self: center; display: flex; align-items: center; flex: none;
+    position: relative; text-shadow: 0 0 8px rgba(255, 154, 61, 0.5); } /* BEST 뒤 배치 */
+  #logoutBtn::after { content: ''; position: absolute; inset: -10px; } /* 보이지 않는 히트 헤일로 — 클릭 범위 상하좌우 +10px */
   #logoutBtn:hover { border-color: #ff9a3d; box-shadow: 0 0 10px rgba(255, 154, 61, 0.4); }
   .hud:not(.logged-in) #logoutBtn { display: none; }
   .hud .lives {
@@ -616,16 +617,9 @@
     return p(d.getFullYear() % 100) + p(d.getMonth() + 1) + p(d.getDate()) + '.' + p(d.getHours()) + ':' + p(d.getMinutes());
   }
   function fmtNum(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); } // 3자리 콤마
-  // 이모지 이니셜 테스트 — 표시 전용(저장·클라우드 미반영). 제거하려면 빈 배열([]) 반환으로.
-  function rankTestSet() {
-    const names = ['💖💙🏆', '💣🐭🐮', '🐯🐰🐲', '🐍🐴🐑', '🐵🐔🐶', '🐷ⓆⓇ', 'ⒷⓌⒺ', 'ⓂⓈ0'];
-    const ts = Date.now() - 3 * 86400000; // 3일 전 — 날짜 정렬 시 맨 아래
-    return names.map(function (n, i) {
-      return { name: n, score: 800 + i * 120, cum: 2000 + i * 900, level: 1 + (i % 2), ts: ts, when: fmtWhen(ts) };
-    });
-  }
+  // (이모지 테스트 데이터셋 — 2026-07-17 전체 초기화 지시로 제거)
   function rankInit() {
-    recordsList = ((cloudAll && cloudAll.length) ? cloudAll : loadRecords()).concat(rankTestSet());
+    recordsList = (cloudAll && cloudAll.length) ? cloudAll : loadRecords();
     const L = rankLayout();
     rankViz.order = recordsList.slice();
     rankViz.order.sort(RANK_SORTS[2]);
@@ -2139,12 +2133,10 @@
     cloudSave(Object.assign({ game: state.score }, rec)); // 클라우드 저장 — game=이번판 점수(서버 누적 increment용)
   }
 
-  // 랭킹 BEST 초기화 v2 (2026-07-17 지시) — 로컬 records의 최고점(score)만 0으로, 기기당 1회 (누적·레벨·날짜 유지)
-  if (!safeStore.get('neon-breakout-bestreset-v2', null)) {
-    const _r2 = loadRecords();
-    _r2.forEach(r => { r.score = 0; });
-    safeStore.set(REC_KEY, JSON.stringify(_r2));
-    safeStore.set('neon-breakout-bestreset-v2', '1');
+  // 랭킹 데이터 전체 초기화 v3 (2026-07-17 지시 — "이제부터 시작") — 로컬 records 전체 삭제, 기기당 1회
+  if (!safeStore.get('neon-breakout-rankwipe-v3', null)) {
+    safeStore.remove(REC_KEY);
+    safeStore.set('neon-breakout-rankwipe-v3', '1');
   }
   // 데모 화면 하단 TOP 3용 로컬 캐시
   let localTopCache = loadRecords().slice(0, 3);
@@ -2167,7 +2159,7 @@
       const appMod = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js');
       fsm = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
       fdb = fsm.getFirestore(appMod.initializeApp(FIREBASE_CONFIG));
-      migratePlayers().then(resetCloudBest).then(refreshCloudTop); // 1회 구조 이전 → BEST 초기화(서버 플래그) → 랭킹 로드
+      migratePlayers().then(wipeCloudRank).then(refreshCloudTop); // 1회 구조 이전 → 전체 초기화(서버 플래그) → 랭킹 로드
     } catch (e) { fdb = null; }
   }
   // 집계 구조 — 'players' 컬렉션: 이니셜당 문서 1개. cum=서버 원자 누적(increment, 다기기 합산 정확), score/level=max 병합.
@@ -2220,19 +2212,23 @@
       await fsm.setDoc(metaRef, { migrated: true, at: Date.now() });
     } catch (e) {}
   }
-  // 랭킹 BEST 초기화 — 서버 플래그(_meta.bestReset)로 전 세계 1회만: players 전 문서 score=0 (cum·level·날짜 유지)
-  async function resetCloudBest() {
+  // 랭킹 전체 초기화 — 서버 플래그(_meta.wipe1)로 전 세계 1회: players 전 문서 삭제 + 레거시 폴백 차단 ("이제부터 시작")
+  let legacyOff = false; // _meta.legacyOff — 옛 scores 컬렉션 폴백 차단 (초기화 후 옛 데이터 부활 방지)
+  async function wipeCloudRank() {
     if (!fdb) return;
     try {
       const metaRef = fsm.doc(fdb, 'players', '_meta');
       const meta = await fsm.getDoc(metaRef);
-      if (meta.exists() && meta.data().bestReset) return; // 이미 실행됨
-      const ps = await fsm.getDocs(fsm.query(fsm.collection(fdb, 'players'), fsm.orderBy('score', 'desc'), fsm.limit(200)));
+      const md = meta.exists() ? meta.data() : {};
+      legacyOff = !!md.legacyOff;
+      if (md.wipe1) return; // 이미 실행됨
+      const ps = await fsm.getDocs(fsm.query(fsm.collection(fdb, 'players'), fsm.orderBy('score', 'desc'), fsm.limit(300)));
       for (const d of ps.docs) {
         if (d.id === '_meta') continue;
-        await fsm.setDoc(d.ref, { score: 0 }, { merge: true });
+        await fsm.deleteDoc(d.ref);
       }
-      await fsm.setDoc(metaRef, { bestReset: true, bestResetAt: Date.now() }, { merge: true });
+      await fsm.setDoc(metaRef, { wipe1: true, legacyOff: true, wipedAt: Date.now() }, { merge: true });
+      legacyOff = true;
     } catch (e) {}
   }
   async function refreshCloudTop() {
@@ -2241,7 +2237,7 @@
       const ps = await fsm.getDocs(fsm.query(
         fsm.collection(fdb, 'players'), fsm.orderBy('score', 'desc'), fsm.limit(100)));
       let list = ps.docs.map(d => d.data()); // _meta는 score가 없어 쿼리에서 자동 제외
-      if (!list.length) { // 폴백 — 집계 문서가 아직 없으면(이전 전/규칙 차단) 구 컬렉션에서 병합
+      if (!list.length && !legacyOff) { // 폴백 — 집계 문서가 없을 때만(초기화 후엔 차단 — 옛 데이터 부활 방지)
         const s1 = await fsm.getDocs(fsm.query(fsm.collection(fdb, 'scores'), fsm.orderBy('score', 'desc'), fsm.limit(100)));
         list = s1.docs.map(d => d.data());
         try {
