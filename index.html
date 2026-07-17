@@ -261,9 +261,9 @@
   .hud-lines .hud-line { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
   .hud-line2 .pname, .hud-line2 .pscore { color: #2effc8; text-shadow: 0 0 10px rgba(46, 255, 200, 0.5); font-variant-numeric: tabular-nums; }
   .hud:not(.logged-in) .hud-line2 .pname, .hud:not(.logged-in) .hud-line2 .pscore { display: none; }
-  #logoutBtn { margin-left: 12px; padding: 0.6em 1.1em; border: 1px solid var(--line); border-radius: 10px;
+  #logoutBtn { margin-right: 8px; padding: 0.25em 0.7em; border: 1px solid var(--line); border-radius: 8px;
     background: var(--panel); color: #ff9a3d; font: bold 12px ui-monospace, Menlo, Consolas, 'Courier New', monospace;
-    cursor: pointer; align-self: center; flex: none; text-shadow: 0 0 8px rgba(255, 154, 61, 0.5); }
+    cursor: pointer; align-self: center; flex: none; text-shadow: 0 0 8px rgba(255, 154, 61, 0.5); } /* BEST 줄 맞춤 — 줄 제일 앞 */
   #logoutBtn:hover { border-color: #ff9a3d; box-shadow: 0 0 10px rgba(255, 154, 61, 0.4); }
   .hud:not(.logged-in) #logoutBtn { display: none; }
   .hud .lives {
@@ -360,10 +360,9 @@
   <div class="hud">
     <div class="hud-side">
       <div class="hud-lines">
-        <div class="hud-line"><span class="label" id="bestLabel">BEST</span><span class="best" id="best">0</span></div>
+        <div class="hud-line"><button id="logoutBtn" title="로그아웃 — 이니셜 세션 해제">Log Out</button><span class="label" id="bestLabel">BEST</span><span class="best" id="best">0</span></div>
         <div class="hud-line hud-line2"><span id="playerName" class="pname">---</span><span id="playerScore" class="pscore">0</span><span class="label">LV</span><span id="level">1</span></div>
       </div>
-      <button id="logoutBtn" title="로그아웃 — 이니셜 세션 해제">Log Out</button>
     </div>
     <div class="score-wrap">
       <span class="label">SCORE</span><span class="score" id="score">0</span>
@@ -488,7 +487,7 @@
 
   const BEST_KEY = 'neon-breakout-best';
   let best = Number(safeStore.get(BEST_KEY, 0)) || 0;
-  bestEl.textContent = best;
+  bestEl.textContent = String(best).replace(/\B(?=(\d{3})+(?!\d))/g, ','); // 자리수 콤마 (초기 표시)
   // 로그인 HUD — 기록보기에서 이니셜 선택 = 로그인, Log Out 전까지 유지(새로고침 포함)
   const hudEl = document.querySelector('.hud');
   const playerNameEl = document.getElementById('playerName');
@@ -2003,7 +2002,7 @@
     lastShownLives = state.lives;
     // 하트 수에 비례한 패들 두께 (5개=14px … 1개=6px)
     state.paddle.h = Math.min(16, 4 + state.lives * 2);
-    bestEl.textContent = best;
+    bestEl.textContent = fmtNum(best); // 자리수 콤마 표시
     if (loginName) { // 누적점수 실시간 합계 — 저장된 누적 + 이번 판 점수 (콤마 표시, 데모 점수 제외)
       const live = playerCum + ((!state.attract && !scoreSaved) ? state.score : 0);
       playerScoreEl.textContent = fmtNum(live);
