@@ -4225,7 +4225,7 @@
   let lastInputTick = 0;
   const IDLE_LIMIT = 1200;
   function enterAttract() {
-    if (state.mode === 'entry') confirmEntry(entryNameNow()); // 입력 중이던 기록은 자동 저장(만료·유휴·EXIT) — forcedName으로 중복가드 우회, 릴 기본값=본인 이니셜
+    if (state.mode === 'entry') { const nm = entryNameNow(); if (!isTakenNow(nm)) confirmEntry(nm); } // 자동 저장(만료·유휴·EXIT) — 미등록 이니셜만 저장. 기등록(남의) 이니셜엔 쓰지도 로그인하지도 않음(오염·신원 탈취·로그아웃 무효화 방지). 로그인 중엔 애초에 entry 미진입
     state.attract = true;
     simMenu = false;
     // 로그인 상태는 데모 복귀에도 유지 — Log Out으로만 해제
