@@ -1692,6 +1692,7 @@
   let entryCheckName = '', entryCheckT = 0; // 릴 정지 감지 → 서버 전수 조회 디바운스
   function enterEntryMode() {
     if (loginName) { confirmEntry(loginName); return; } // 로그인 중 — 릴 생략, 자기 이니셜 자동 저장 → 랭킹 (새 이니셜 생성은 Log Out 후)
+    entryDupMsg = 0; entryCheckName = ''; entryCheckT = 0; // 이전 세션 배너/디바운스 잔여 초기화
     state.mode = 'entry';
     entryDeadline = state.tick + 600; // 최초 10초
   }
