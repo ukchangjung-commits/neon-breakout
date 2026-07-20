@@ -1,0 +1,38 @@
+<!doctype html><html lang=ko><head><meta charset=utf-8><title>neon-breakout 대화 뷰어</title>
+<style>:root{color-scheme:dark}body{font:14px/1.6 system-ui,'Malgun Gothic',sans-serif;max-width:940px;margin:0 auto;padding:16px;background:#0d1117;color:#e6edf3}
+h1{color:#58a6ff;font-size:19px;margin:6px 0}#bar{position:sticky;top:0;background:#0d1117;padding:8px 0;border-bottom:1px solid #21262d;z-index:9}
+#q{width:52%;padding:6px 10px;background:#161b22;border:1px solid #30363d;color:#e6edf3;border-radius:6px}
+button{background:#21262d;color:#e6edf3;border:1px solid #30363d;border-radius:6px;padding:5px 9px;cursor:pointer;margin-left:5px}
+.msg{border-radius:8px;padding:8px 12px;margin:8px 0}.user{background:#1c2733}.assistant{background:#161b22;border:1px solid #21262d}
+.meta{font-size:12px;color:#8b949e;margin-bottom:4px;cursor:pointer;user-select:none}pre{white-space:pre-wrap;word-break:break-word;margin:0;font:inherit}
+.hid{display:none}.warn{background:#3d1c1c;border:1px solid #f85149;color:#ffa198;padding:8px;border-radius:6px;margin:8px 0}#stat{color:#8b949e;font-size:12px}</style></head>
+<body><h1>neon-breakout — 대화 컨텍스트</h1>
+<div id=bar><input id=q placeholder="검색…" oninput="render()"><button onclick="xall(1)">모두 펼침</button><button onclick="xall(0)">모두 접기</button><button onclick="exp('md')">MD 저장</button><button onclick="expHtml()">HTML 저장</button><button onclick="exp('json')">JSON 저장</button><label style="margin-left:8px;font-size:12px;color:#8b949e"><input type=checkbox id=onlyExp> 펼친 것만 저장</label><span id=stat></span></div>
+<div id=warns></div><div id=app></div>
+<script src="manifest.js" onerror="window.__noman=1"></script>
+<script>
+window.CTX=window.CTX||[];var LOADED=0,FAILED=[];
+function loadSeq(list,i,miss){
+  if(list&&i>=list.length)return done();
+  if(!list&&miss>=2)return done();
+  var src=list?list[i]:('data/part'+String(i+1).padStart(4,'0')+'.js');
+  var s=document.createElement('script');s.src=src;
+  s.onload=function(){LOADED++;loadSeq(list,i+1,0)};
+  s.onerror=function(){if(list){FAILED.push(src);loadSeq(list,i+1,0)}else{loadSeq(list,i+1,miss+1)}};
+  document.head.appendChild(s);
+}
+function boot(){var m=window.CTX_MANIFEST,list=null;if(m&&m.parts&&m.parts.length)list=m.parts.map(function(n){return 'data/'+n});loadSeq(list,0,0);}
+function done(){var a=window.CTX,st=document.getElementById('stat');var MC=(window.CTX_MANIFEST&&window.CTX_MANIFEST.chars)||{};var cT=MC.total||0;if(!cT){for(var i=0;i<a.length;i++)cT+=(a[i].x||'').length;}var cH=MC.human||0,cP=MC.pure||0;var charStr=(cH&&cP)?('(내대화 '+cH.toLocaleString()+' · 순수 '+cP.toLocaleString()+' · 전체 '+cT.toLocaleString()+')자'):(cT.toLocaleString()+'자');var cmp=' · 전체≈모비딕 '+Math.round(cT/1200000)+'권·중학국어 '+Math.round(cT/135000)+'권';var mb=(new Blob([JSON.stringify(a)]).size/1048576).toFixed(1);var ts=a.filter(function(m){return m.t}).map(function(m){return m.t}).sort();var s=ts[0]||'',e=ts[ts.length-1]||'',dur='';if(s&&e){var ms=Date.parse(e)-Date.parse(s);if(ms>=0){var mins=Math.floor(ms/60000),d=Math.floor(mins/1440),h=Math.floor((mins%1440)/60),mm=mins%60;dur=(d?d+'일 ':'')+(h?h+'시간 ':'')+mm+'분';}}var tn=a.map(function(m){return Date.parse(m.t)}).filter(function(x){return x}).sort(function(x,y){return x-y});var act=0,sess=tn.length?1:0,CAP=600000;for(var j=1;j<tn.length;j++){var g=tn[j]-tn[j-1];act+=Math.min(g,CAP);if(g>1800000)sess++;}var am=Math.round(act/60000),actStr=Math.floor(am/60)+'시간 '+(am%60)+'분';function fmt(t){return t?t.replace('T',' ').slice(0,16):'—';}st.innerHTML=' · '+a.length+'개 메시지 · '+charStr+cmp+'<br>· '+mb+'MB · '+fmt(s)+' ~ '+fmt(e)+(dur?' (총 '+dur+' · 실사용 ~'+actStr+', '+sess+'세션)':'')+(FAILED.length?' · 손상 '+FAILED.length:'');if(FAILED.length)document.getElementById('warns').innerHTML='<div class=warn>일부 청크 로드 실패(그 구간만 누락): '+FAILED.join(', ')+'</div>';render();}
+function esc(s){return String(s).replace(/[&<>]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;'}[c]})}
+function render(){var q=(document.getElementById('q').value||'').toLowerCase(),h=[],a=window.CTX;
+  for(var i=0;i<a.length;i++){var m=a[i];if(q&&(m.x||'').toLowerCase().indexOf(q)<0)continue;
+    h.push('<div class="msg '+(m.r==='user'?'user':'assistant')+'" data-ci="'+i+'"><div class=meta>'+(m.r==='user'?'🧑 사용자':'🤖 Claude')+' · '+esc(m.s)+' · '+esc(m.t)+'</div><pre>'+esc(m.x)+'</pre></div>');}
+  document.getElementById('app').innerHTML=h.join('')||'<p>결과 없음</p>';}
+function xall(v){var p=document.querySelectorAll('#app pre');for(var i=0;i<p.length;i++)p[i].classList.toggle('hid',!v)}
+function exp(f){var a=exportSet(),o;if(f==='json')o=JSON.stringify(a,null,1);else o=a.map(function(m){return '## '+(m.r==='user'?'사용자':'Claude')+' · '+m.s+' · '+m.t+'\n\n'+m.x}).join('\n\n');
+  var b=new Blob([o],{type:'text/plain'}),u=URL.createObjectURL(b),l=document.createElement('a');l.href=u;l.download='neon-breakout_export.'+(f==='json'?'json':'md');l.click();}
+document.getElementById('app').addEventListener('click',function(e){if(e.target.classList.contains('meta')){var p=e.target.nextSibling;if(p)p.classList.toggle('hid')}});
+function expHtml(){var a=exportSet(),rows=a.map(function(m){return '<div class="msg '+(m.r==='user'?'user':'assistant')+'"><div class=meta>'+(m.r==='user'?'🧑 사용자':'🤖 Claude')+' · '+esc(m.s)+' · '+esc(m.t)+'</div><pre>'+esc(m.x)+'</pre></div>'}).join('');var o='<!doctype html><html lang=ko><head><meta charset=utf-8><title>neon-breakout 대화</title><style>'+document.querySelector('style').innerHTML+'</style></head><body><h1>neon-breakout — 대화 컨텍스트</h1>'+rows+'</body></html>';var b=new Blob([o],{type:'text/html'}),u=URL.createObjectURL(b),l=document.createElement('a');l.href=u;l.download='neon-breakout_export.html';l.click();}
+function exportSet(){var cb=document.getElementById('onlyExp');if(cb&&cb.checked){var out=[],ms=document.querySelectorAll('#app .msg');for(var i=0;i<ms.length;i++){var pre=ms[i].querySelector('pre');if(pre&&!pre.classList.contains('hid')){var ci=+ms[i].getAttribute('data-ci');if(!isNaN(ci))out.push(window.CTX[ci]);}}return out;}return window.CTX;}
+boot();
+</script></body></html>
