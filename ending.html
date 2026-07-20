@@ -62,6 +62,11 @@
   const sShot=()=>{tone(720+Math.random()*260,0.06,'square',0.04,-480); nz(0.03,0.03,3000);};
   const sClang=()=>{tone(300,0.18,'triangle',0.06,260); nz(0.05,0.03,1600);};
 
+  // roundRect 폴리필 — 구형/임베디드 엔진(미지원)에서 예외로 루프가 죽는 것 방지
+  if(window.CanvasRenderingContext2D && !CanvasRenderingContext2D.prototype.roundRect){
+    CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){ r=Math.min(r,Math.abs(w)/2,Math.abs(h)/2);
+      this.moveTo(x+r,y); this.arcTo(x+w,y,x+w,y+h,r); this.arcTo(x+w,y+h,x,y+h,r); this.arcTo(x,y+h,x,y,r); this.arcTo(x,y,x+w,y,r); this.closePath(); return this; }; }
+
   // ---------- particles (game-faithful) ----------
   let P=[];
   function burst(x,y,c,n,pw){ if(P.length>720)return; n=Math.round(n*0.7); for(let i=0;i<n;i++){ const a=Math.random()*6.28,s=(1+Math.random()*3.5)*pw;
@@ -114,21 +119,24 @@
     if(i===9) return {dx:0, dy:-Math.abs(Math.sin(pt*0.85))*3}; // 닭: 종종걸음
     if(i===10) return {dx:Math.sin(pt*0.28)*6, dy:-Math.abs(Math.sin(pt*0.35))*4}; // 개: 장난스레
     if(i===11) return {dx:0, dy:-Math.abs(Math.sin(pt*0.16))*3}; // 돼지: 느릿
-    return {dx:0, dy:-Math.abs(Math.sin(pt*0.32+i))*5}; // 소·호랑이 등 기본
+    if(i===1) return {dx:Math.sin(pt*0.16)*2, dy:-Math.abs(Math.sin(pt*0.18))*4}; // 소: 묵직한 뚜벅
+    if(i===2) return {dx:0, dy:-Math.abs(Math.sin(pt*0.22))*13}; // 호랑이: 힘찬 도약
+    if(i===7) return {dx:Math.sin(pt*0.5)*2, dy:-Math.abs(Math.sin(pt*0.5))*6}; // 양: 총총 트롯
+    return {dx:0, dy:-Math.abs(Math.sin(pt*0.32+i))*4}; // 기타
   }
 
   // ---------- ranking-transition letters ----------
   const WHEEL='0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   let letters=[], caught=[], initFly=null;
-  function initLetters(){ letters=[]; const chars=(WHEEL+'🐭Ⓑ').split(''); // 낙엽처럼 흩뿌릴 글자들
+  function initLetters(){ letters=[]; const chars=Array.from(WHEEL+'🐭Ⓑ'); // 낙엽처럼 흩뿌릴 글자들(코드포인트 단위 — 이모지 안 깨짐)
     for(let k=0;k<44;k++){ letters.push({ ch:chars[k%chars.length], x:Math.random()*W, y:-20-Math.random()*H*0.6,
       vx:(Math.random()-0.5)*1.4, vy:0.8+Math.random()*1.4, rot:Math.random()*6.28, vr:(Math.random()-0.5)*0.12, sz:18+Math.random()*12, hue:ROW[k%ROW.length] }); } }
 
   // ---------- trophies ----------
   let trophies=[];
   // 소·대·중 = 작게·크게·중간 (미러 배치)
-  const TSIZE=[34,60,46]; const TDX=[-96,0,96];
-  function initTrophies(){ trophies=TSIZE.map((s,k)=>({k,size:s,x:W/2+TDX[k],y:-40-k*60,vy:0,landed:false,ty:0})); }
+  const TSIZE=[34,60,46]; const TDX=[-96,0,96]; const TPUSH=[0,4,8]; // 미는 지신: 쥐·용·원숭이
+  function initTrophies(){ trophies=TSIZE.map((s,k)=>({k,size:s,x:W/2+TDX[k],y:168,vy:0,landed:false,released:false,delay:20+k*32,landY:300-s/2})); }
 
   // ---------- phase machine ----------
   let phase=0, pt=0, F=0, score=76890, scoreT=76890, bonusFired=false, shake=0;
@@ -136,7 +144,10 @@
   function goPhase(n){ phase=n; pt=0; if(LB[n])phaseLabel.textContent=LB[n];
     if(n===0){ P=[]; confBlast(); }
     if(n===1){ initZ(); Z.forEach(z=>z.shown=false); }
-    if(n===2){ finishCount=0; ranksBoard=[]; }
+    if(n===2){ finishCount=0; ranksBoard=[]; paddle.x=W/2-paddle.w/2; } // 패들 중앙 하단 주차 — 스윕 끝 위치(600, 오프스크린) 교정, 레이스/피날레 내내 보이게
+    if(n===3){ if(!Z.length) initZ(); // 2막 스킵해도 보너스·순위 확정(유실 방지)
+      if(!bonusFired){ bonusFired=true; scoreT+=1000000; }
+      if(ranksBoard.length<12){ ranksBoard=Z.slice().sort((a,b)=>a.rank-b.rank); Z.forEach(z=>{ z.fin=true; if(!z.finRank)z.finRank=z.rank; }); } }
     if(n===4){ initLetters(); caught=[]; initFly=null; }
     if(n===5){ initTrophies(); }
   }
@@ -159,7 +170,7 @@
     else if(phase===1){ // 패들이 12지신 흘리기
       const sweep=clamp((pt-10)/170,0,1); paddle.x=lerp(-paddle.w, W, sweep);
       for(let i=0;i<12;i++){ const dropX=laneX(i); if(!Z[i].shown && paddle.x+paddle.w/2>=dropX){ Z[i].shown=true; Z[i].y=paddle.y; Z[i].vy=1; sClang(); } }
-      for(const z of Z){ if(z.shown && z.y<SY){ z.vy+=0.5; z.y=Math.min(SY, z.y+z.vy); if(z.y>=SY){ z.y=SY; z.vy*=-0.28; if(Math.abs(z.vy)<1.2)z.vy=0; } } }
+      for(const z of Z){ if(z.shown && Math.abs(z.y-SY)>0.5){ z.y+=(SY-z.y)*0.2; if(Math.abs(z.y-SY)<0.5)z.y=SY; } } // 출발선(SY)으로 정착(패들 아래→위로 올라붙음) — 출발 순간 순간이동 제거
       if(pt>=200) goPhase(2);
     }
     else if(phase===2){ // 십이지 설화 달리기
@@ -196,9 +207,10 @@
       for(const c of caught){ c.t=Math.min(1,c.t+0.05); c.x=lerp(c.x,c.tx,0.08); c.y=lerp(c.y,c.ty,0.08); }
       if(caught.length>=3 && pt>=230) goPhase(5);
     }
-    else if(phase===5){ // 트로피 헌액
-      for(const T of trophies){ const delay=T.k*22; if(pt>delay && !T.landed){ T.vy+=0.6; T.y+=T.vy; const landY=H*0.5-120; if(T.y>=landY){ T.y=landY; T.landed=true; T.vy=0; sClang(); burst(T.x,landY,GOLD,14,1.4); shake=Math.max(shake,4); } } }
-      if(pt>=200) goPhase(6);
+    else if(phase===5){ // 트로피 헌액 — 상단 지신이 밀어 떨어뜨림
+      for(const T of trophies){ if(!T.released && pt>=T.delay){ T.released=true; T.vy=1.5; sClang(); burst(T.x,168,'#8fa8cf',10,1.2); shake=Math.max(shake,4); }
+        if(T.released && !T.landed){ T.vy+=0.6; T.y+=T.vy; if(T.y>=T.landY){ T.y=T.landY; T.landed=true; T.vy=0; sClang(); burst(T.x,T.landY,GOLD,14,1.4); shake=Math.max(shake,5); } } }
+      if(pt>=210) goPhase(6);
     }
     else if(phase===6){ if(pt%70===0) confBlast(); }
     updP();
@@ -240,7 +252,8 @@
 
     drawP(); // 파티클(폭죽/색종이)
 
-    if(phase===0){ // 완주 축하 텍스트 (골드 세리프, 영어)
+    if(phase===0){ // 완주 축하 — 게임 상태(패들·빈 필드)에서 폭죽 시작
+      drawPaddle(); // 게임 레이아웃 유지(블럭만 없음) — 여기서 폭죽이 터짐
       const a=pt<300?1:clamp(1-(pt-300)/60,0,1);
       ctx.globalAlpha=a; goldText('CONGRATULATIONS!', W/2, 150, 30, 1.15, 1.35);
       ctx.font='bold 14px ui-monospace,Consolas,monospace'; ctx.fillStyle='#cfe6ff'; ctx.textAlign='center'; ctx.textBaseline='alphabetic';
@@ -253,6 +266,7 @@
     }
 
     if(phase===2||phase===3){ // 달리는 지신 + 순위판
+      drawPaddle(); // 게임 레이아웃 유지(요구사항1) — 하단 패들 상시 표시
       for(const z of Z){ const yy=z.fin? FY : z.y; emoji(z.e, z.x, yy-16, z.i===4?36:30);
         if(z.i===0 && phase===2 && pt<ARR[0]-8){} }
       // 순위판(오른쪽) — 도착 순서(설화 등수)
@@ -281,11 +295,12 @@
       const cy=H*0.5+10; ctx.textAlign='center'; ctx.textBaseline='middle';
       for(let k=0;k<3;k++){ const cx=W/2+(k-1)*84; const ch=TARGET[k]; ctx.fillStyle='#fff'; ctx.shadowColor=GOLD; ctx.shadowBlur=20;
         ctx.font=(/[A-Z0-9]/.test(ch)?'bold 78px ui-monospace,Consolas,monospace':'78px serif'); ctx.fillText(ch,cx,cy); ctx.shadowBlur=0; }
-      // 12지신 상단 정렬(트로피 미는 연출)
-      for(let i=0;i<12;i++) emoji(ZE[i], laneX(i), 150, 20);
-      // 트로피(소·대·중)
+      // 미는 지신 3마리 — 릴리즈 순간 트로피 바로 위에서 아래로 밀침, 나머지 9마리는 상단 관중
+      for(let k=0;k<3;k++){ const T=trophies[k]; const lunge=Math.max(0,1-Math.abs(pt-T.delay)/14)*16; emoji(ZE[TPUSH[k]], T.x, 150+lunge, 24); }
+      let sp=0; for(let i=0;i<12;i++){ if(TPUSH.indexOf(i)>=0) continue; emoji(ZE[i], 40+sp*((W-80)/8), 108, 18); sp++; }
+      // 트로피(소·대·중) — 밀려 떨어져 이니셜 위에 쌓임
       for(const T of trophies){ emoji('🏆', T.x, T.y, T.size); }
-      if(phase===6){ ctx.globalAlpha=clamp(pt/30,0,1); goldText('CHAMPION', W/2, H*0.5-150, 26, 1.15, 1.4); ctx.globalAlpha=1; }
+      if(phase===6){ ctx.globalAlpha=clamp(pt/30,0,1); goldText('CONGRATULATIONS', W/2, H*0.5-150, 22, 1.1, 1.35); ctx.globalAlpha=1; }
     }
 
     ctx.restore();
